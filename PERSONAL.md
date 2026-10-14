@@ -70,7 +70,7 @@
 在仓库根目录运行下面的准备和检查命令（Windows PowerShell）：
 
 ```powershell
-git -c http.sslBackend=openssl submodule update --init packages/foliate-js packages/simplecc-wasm packages/js-mdict packages/qcms apps/readest-app/src-tauri/plugins/tauri-plugin-turso apps/readest-app/src-tauri/plugins/tauri-plugin-webview-upgrade
+git -c http.sslBackend=openssl submodule update --init --recursive packages/foliate-js packages/simplecc-wasm packages/js-mdict packages/qcms packages/tauri apps/readest-app/src-tauri/plugins/tauri-plugin-turso apps/readest-app/src-tauri/plugins/tauri-plugin-webview-upgrade
 pnpm install --frozen-lockfile
 pnpm --filter @readest/readest-app setup-vendors
 node --test scripts/personal-build.test.mjs
