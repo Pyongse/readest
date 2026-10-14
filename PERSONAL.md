@@ -7,7 +7,7 @@
 - 保留 Readest 的同步引擎、冲突处理、OAuth PKCE 和安全令牌存储。
 - 通过上游的 `NEXT_PUBLIC_SELF_HOSTED=true` 开放第三方同步和自定义翻译服务，无需购买 Readest 会员。这也会开放上游归入同一自托管开关的其他本地功能；官方付费服务器仍按其自己的权限处理请求。
 - 私人版名称是 **Readest Personal**，应用标识是 `com.bilingify.readest.personal`。默认数据目录与官方安装分离；桌面凭据使用独立的 `Readest Personal Safe Storage` 名称，避免共用原版的 Drive 令牌和同步口令。若手动选择自定义书库目录，也应选择独立目录。
-- Google Client ID 与 Windows、Android 的回调协议由同一个脚本生成。没有配置时，不使用 Readest 官方的 Google 客户端，Drive 等待配置；本地阅读和自定义翻译可以先构建。
+- 当前安装包未配置 Google OAuth，不使用 Readest 官方的 Google 客户端。本地阅读和自定义翻译可先使用；Drive 登录须完成下述分平台适配和真实测试。
 - 关闭官方自动更新，后续从自己的构建产物安装更新。私人版 Windows 安装器不注册与官方共享的缩略图处理器。
 - GitHub Actions 包含完整单元测试、类型检查、Windows x64 NSIS 安装器和 Android arm64 签名 APK 构建。
 
@@ -18,31 +18,29 @@
 1. Fork [readest/readest](https://github.com/readest/readest)，将本地 `personal-drive` 分支推到自己的 Fork。改动补丁可以应用在上述上游提交上。
 2. 在 Fork 的 Actions 页面启用工作流。`personal-drive` 的相关代码推送会触发 **Build Readest Personal**。如果需要页面上的手动运行按钮，将 `personal-drive` 设为 Fork 默认分支。
 3. 配置下表的 Android 签名 Secrets。它们必须长期保持一致，才能覆盖更新已经安装的私人版 APK。
-4. Google Cloud 配置完成后，新增仓库 **Variable** `GOOGLE_CLIENT_ID`，再构建两端。客户端 ID 是公开信息；无需 Google Client Secret。
+4. Google Cloud 配置按 [详细操作指南](GOOGLE_OAUTH_SETUP.md) 创建同一项目下的 Desktop 和 Android 客户端。当前源码仍保留上游的共享客户端实现，须先适配对应平台的授权流程，再接入客户端配置重新构建；不要直接把这两个 ID 填到现有的共享变量中。
 5. 通过后，在工作流的 Artifacts 中下载 `readest-personal-windows` 和 `readest-personal-android`。保留期为 30 天。每个包带有源码提交、子模块提交和公开客户端 ID 的构建记录。
 
 | 类型 | 名称 | 内容 |
 | --- | --- | --- |
-| Variable | `GOOGLE_CLIENT_ID` | 自己 Google Cloud 项目的 OAuth 客户端 ID；可以暂时留空 |
+| Variable | `GOOGLE_CLIENT_ID` | 现有构建脚本的上游共享客户端输入；当前保持留空，待分平台授权适配 |
 | Secret | `ANDROID_KEY_BASE64` | 固定 JKS 签名文件的 Base64 内容 |
 | Secret | `ANDROID_KEY_ALIAS` | 签名证书别名 |
 | Secret | `ANDROID_KEY_PASSWORD` | 签名文件与证书共用的密码 |
 
 本机已生成固定签名资料，位于源码仓库外的 `E:\reading\readest-personal-private`。`github-secrets.json` 包含上述三个 Secret，不能提交到源码仓库或作为构建产物发布。请备份此目录；丢失签名会影响 APK 覆盖更新。
 
-本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。完整单元测试有 13,600 项通过；启动时尚未准备 PDF 资源的两个测试，补齐资源后与 Drive、自定义翻译相关的复核共 85 项全部通过。尚未完成 Google 登录及两台设备同步实测。工作流配置检查不等于安装包已经生成。
+本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。GitHub 的完整检查已通过：1,149 个测试文件、13,612 项测试通过，另有上游原有的 4 个文件、16 项测试跳过。Windows 安装包与 Android arm64 APK 均已在 GitHub 构建成功，APK 签名校验通过。尚未完成安装后的真实设备验收、Google 登录及两台设备同步实测。
+
+本次双端构建来源为提交 `3ab3fc78e645ceb1b81aff8d80f49c2d36183673`，[完整工作流结果](https://github.com/Pyongse/readest/actions/runs/38540782594)已通过。安装包、构建来源记录和 SHA-256 校验值已下载到 `E:\reading\readest-packages`。按用户选择，Fork 原有的官方工作流保持启用。
 
 ## Google Cloud：下一阶段所需配置
 
-当前实现沿用 Readest 上游的共用 **iOS 类型公开 OAuth 客户端 + PKCE + reverse-DNS 回调**。同一个客户端 ID 必须用于两端，才会在 `drive.file` 权限下访问同一套应用文件。
+Google [OAuth 政策](https://developers.google.com/identity/protocols/oauth2/policies)要求各平台分别注册匹配类型的客户端。之前沿用上游共用 iOS 客户端的方案不应作为 Windows、Android 的正式接入方案，现已停止推荐。
 
-1. 创建自己的 Google Cloud 项目，启用 Google Drive API。
-2. 配置 Google Auth Platform 的应用名称和受众；测试阶段把自己的 Google 账号加入测试用户。
-3. 创建与上游实现对应的 iOS 类型客户端，Bundle ID 填 `com.bilingify.readest.personal`。这里只获取公共客户端 ID，不把 Google Secret 写进应用。
-4. 设置 `GOOGLE_CLIENT_ID` 后，构建脚本自动注册回调。例如 `123-example.apps.googleusercontent.com` 对应 `com.googleusercontent.apps.123-example:/oauthredirect`。
-5. Windows、Android 都在“设置 → 集成 → Google Drive”连接同一个 Google 账号，并打开书籍文件、阅读进度和笔记同步选项。
+请按 [Google Cloud 详细操作指南](GOOGLE_OAUTH_SETUP.md)在同一个 Cloud 项目创建 **Desktop app** 和 **Android** 两个客户端。Windows 需要适配系统浏览器、PKCE 和本机 loopback 回调；Android 需要适配 Google 原生授权 SDK。当前源码尚未完成这些适配，不能仅换客户端 ID 就视为已可登录。两端使用同一项目和同一 Google 账号，仍需验证 `drive.file` 文件互见及同步行为。
 
-这是对现有上游实现的配置，**并非 Google 对 iOS 客户端用于 Windows、Android 的兼容承诺**。Google 文档提示 Android 类型客户端不再支持这里的自定义 URI 流程；不能只换成 Android 客户端 ID 就假定成功。真实授权是下一阶段必须验证的条件；若被拒绝，需要进一步适配 Windows 的桌面 OAuth 与 Android 原生授权，仍应放在同一个 Google Cloud 项目内。
+Android 的包名为 `com.bilingify.readest.personal`，固定签名证书 SHA-1 为 `4A:5D:3F:F0:98:C9:C3:3B:FE:5E:C5:08:F6:7C:18:43:39:E0:91:A4`。
 
 权限只申请 `https://www.googleapis.com/auth/drive.file`，访问应用创建或获授权的文件，不申请整个 Drive 的完整访问权限。Google 项目处于外部应用的 Testing 状态时，带 Drive 权限的 refresh token 通常会在 7 天后过期；长期使用需确认项目发布状态。
 
