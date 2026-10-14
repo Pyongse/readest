@@ -28,6 +28,21 @@ afterEach(() => {
 });
 
 describe('buildGoogleDriveProvider', () => {
+  test('personal builds without OAuth configuration do not use the official client', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
+    vi.stubEnv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', '');
+    vi.mocked(isTauriAppPlatform).mockReturnValue(true);
+    expect(getGoogleClientId()).toBeUndefined();
+    expect(await buildGoogleDriveProvider()).toBeNull();
+    expect(isSyncKeychainAvailable).not.toHaveBeenCalled();
+  });
+
+  test('personal builds use the configured client', () => {
+    vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
+    vi.stubEnv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', CLIENT_ID);
+    expect(getGoogleClientId()).toBe(CLIENT_ID);
+  });
+
   test('falls back to the baked official client id when the env override is unset', async () => {
     vi.stubEnv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', '');
     expect(getGoogleClientId()).toMatch(/\.apps\.googleusercontent\.com$/);

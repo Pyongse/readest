@@ -31,7 +31,8 @@ const OFFICIAL_GOOGLE_CLIENT_ID =
   '209390247301-ctpmep68ppfa56r1b8tr35e4qi4p60kq.apps.googleusercontent.com';
 
 export const getGoogleClientId = (): string | undefined =>
-  process.env['NEXT_PUBLIC_GOOGLE_CLIENT_ID'] || OFFICIAL_GOOGLE_CLIENT_ID;
+  process.env['NEXT_PUBLIC_GOOGLE_CLIENT_ID'] ||
+  (process.env['NEXT_PUBLIC_PERSONAL_BUILD'] === 'true' ? undefined : OFFICIAL_GOOGLE_CLIENT_ID);
 
 /**
  * The official Readest **Web-type** Google OAuth client id used by the browser

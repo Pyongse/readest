@@ -1,0 +1,152 @@
+name: Build Readest Personal
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [personal-drive]
+    paths:
+      - 'apps/readest-app/**'
+      - 'packages/**'
+      - 'scripts/*personal*'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/personal-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize application dependencies
+        run: git submodule update --init packages/foliate-js packages/simplecc-wasm packages/js-mdict packages/qcms
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @readest/readest-app setup-vendors
+      - run: node --test scripts/personal-build.test.mjs
+      - run: pnpm test --run --maxWorkers=4
+      - run: pnpm lint
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - platform: android
+            os: ubuntu-latest
+            target: aarch64-linux-android
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 110
+    env:
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialize application and native dependencies
+        run: git submodule update --init packages/foliate-js packages/simplecc-wasm packages/js-mdict packages/qcms apps/readest-app/src-tauri/plugins/tauri-plugin-turso apps/readest-app/src-tauri/plugins/tauri-plugin-webview-upgrade
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
+        with:
+          key: personal-${{ matrix.platform }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @readest/readest-app setup-vendors
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        if: matrix.platform == 'android'
+        with:
+          distribution: zulu
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4
+        if: matrix.platform == 'android'
+        with:
+          packages: platform-tools
+      - name: Initialize Android while preserving upstream native behavior
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          rm -rf apps/readest-app/src-tauri/gen/android
+          pnpm tauri android init
+          git restore --source=HEAD -- apps/readest-app/src-tauri/gen/android
+          pnpm tauri icon ../../data/icons/readest-book.png
+      - name: Prepare personal identity, OAuth callbacks and translation access
+        run: node scripts/prepare-personal-build.mjs
+      - name: Configure persistent Android release signing
+        if: matrix.platform == 'android'
+        shell: bash
+        env:
+          KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY_BASE64" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Configure ANDROID_KEY_BASE64, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD repository secrets. See PERSONAL.md."
+            exit 1
+          fi
+          printf '%s' "$KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/readest-personal.jks"
+          chmod 600 "$RUNNER_TEMP/readest-personal.jks"
+          export PERSONAL_KEYSTORE="$RUNNER_TEMP/readest-personal.jks"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const escape = (value) => value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/([:=#! ])/g, '\\$1');
+          const properties = {
+            storeFile: process.env.PERSONAL_KEYSTORE,
+            keyAlias: process.env.KEY_ALIAS,
+            password: process.env.KEY_PASSWORD,
+          };
+          fs.writeFileSync('apps/readest-app/src-tauri/gen/android/keystore.properties',
+            Object.entries(properties).map(([key, value]) => `${key}=${escape(value)}`).join('\n') + '\n');
+          JS
+      - name: Build Windows installer
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Get-ChildItem -Path target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe)) {
+            throw 'Windows installer was not produced'
+          }
+      - name: Build Android APK
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm tauri android build -t aarch64 --apk
+          apk=apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          test -f "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
+      - name: Record reproducible build inputs
+        shell: bash
+        run: |
+          git rev-parse HEAD > personal-build-inputs.txt
+          git submodule status >> personal-build-inputs.txt
+          printf '\nGoogle OAuth client ID (public): %s\n' "$GOOGLE_CLIENT_ID" >> personal-build-inputs.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readest-personal-${{ matrix.platform }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+            personal-build-inputs.txt
