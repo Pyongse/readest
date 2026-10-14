@@ -6,7 +6,7 @@
 
 - 保留 Readest 的同步引擎、冲突处理、OAuth PKCE 和安全令牌存储。
 - 通过上游的 `NEXT_PUBLIC_SELF_HOSTED=true` 开放第三方同步和自定义翻译服务，无需购买 Readest 会员。这也会开放上游归入同一自托管开关的其他本地功能；官方付费服务器仍按其自己的权限处理请求。
-- 私人版名称是 **Readest Personal**，应用标识是 `com.bilingify.readest.personal`。默认数据目录与官方安装分离。若手动选择自定义书库目录，也应选择独立目录。
+- 私人版名称是 **Readest Personal**，应用标识是 `com.bilingify.readest.personal`。默认数据目录与官方安装分离；桌面凭据使用独立的 `Readest Personal Safe Storage` 名称，避免共用原版的 Drive 令牌和同步口令。若手动选择自定义书库目录，也应选择独立目录。
 - Google Client ID 与 Windows、Android 的回调协议由同一个脚本生成。没有配置时，不使用 Readest 官方的 Google 客户端，Drive 等待配置；本地阅读和自定义翻译可以先构建。
 - 关闭官方自动更新，后续从自己的构建产物安装更新。私人版 Windows 安装器不注册与官方共享的缩略图处理器。
 - GitHub Actions 包含完整单元测试、类型检查、Windows x64 NSIS 安装器和 Android arm64 签名 APK 构建。

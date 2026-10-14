@@ -15,6 +15,9 @@ async function fixture() {
   const app = path.join(root, 'apps/readest-app');
   const android = path.join(app, 'src-tauri/gen/android/app');
   await mkdir(path.join(android, 'src/main'), { recursive: true });
+  const bridgeDir = path.join(app, 'src-tauri/plugins/tauri-plugin-native-bridge/src');
+  await mkdir(bridgeDir, { recursive: true });
+  await writeFile(path.join(bridgeDir, 'desktop.rs'), 'const KEYRING_SERVICE: &str = "Readest Safe Storage";\n');
   await writeFile(path.join(app, '.env.local'), 'EXISTING_SETTING=keep\n');
   await writeFile(path.join(app, 'src-tauri/tauri.conf.json'), JSON.stringify({
     productName: 'Readest', identifier: 'com.bilingify.readest',

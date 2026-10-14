@@ -50,6 +50,14 @@ for (const [key, value] of Object.entries(values)) {
 }
 fs.writeFileSync(envPath, env.trimStart());
 
+// Desktop keychain entries use a fixed service name, independently of the app ID.
+const bridgePath = path.join(tauriDir, 'plugins/tauri-plugin-native-bridge/src/desktop.rs');
+const bridge = fs.readFileSync(bridgePath, 'utf8');
+if (!bridge.includes('"Readest Safe Storage"') && !bridge.includes('"Readest Personal Safe Storage"')) {
+  throw new Error('Upstream keyring storage changed; review personal credential isolation.');
+}
+fs.writeFileSync(bridgePath, bridge.replace('"Readest Safe Storage"', '"Readest Personal Safe Storage"'));
+
 // Run after Android init and restoring the upstream's committed Android files.
 const androidDir = path.join(tauriDir, 'gen/android');
 function prepareAndroid(directory) {
