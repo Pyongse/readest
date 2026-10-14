@@ -18,6 +18,12 @@ async function fixture() {
   const bridgeDir = path.join(app, 'src-tauri/plugins/tauri-plugin-native-bridge/src');
   await mkdir(bridgeDir, { recursive: true });
   await writeFile(path.join(bridgeDir, 'desktop.rs'), 'const KEYRING_SERVICE: &str = "Readest Safe Storage";\n');
+  const javaDir = path.join(android, 'src/main/java/com/bilingify/readest');
+  const buildSrcDir = path.join(app, 'src-tauri/gen/android/buildSrc/src/main/java/com/bilingify/readest/kotlin');
+  await mkdir(javaDir, { recursive: true });
+  await mkdir(buildSrcDir, { recursive: true });
+  await writeFile(path.join(javaDir, 'MainActivity.kt'), 'package com.bilingify.readest\n');
+  await writeFile(path.join(buildSrcDir, 'BuildTask.kt'), 'package com.bilingify.readest.kotlin\n');
   await writeFile(path.join(app, '.env.local'), 'EXISTING_SETTING=keep\n');
   await writeFile(path.join(app, 'src-tauri/tauri.conf.json'), JSON.stringify({
     productName: 'Readest', identifier: 'com.bilingify.readest',
@@ -54,6 +60,10 @@ test('one preparation aligns both platform callbacks, keeps local settings, and 
   assert.ok(!manifest.includes(upstreamScheme));
   const gradle = await readFile(path.join(android, 'build.gradle.kts'), 'utf8');
   assert.ok(gradle.includes('applicationId = "com.bilingify.readest.personal"'));
+  assert.equal(await readFile(path.join(android, 'src/main/java/com/bilingify/readest/personal/MainActivity.kt'), 'utf8'),
+    'package com.bilingify.readest.personal\n');
+  assert.equal(await readFile(path.join(app, 'src-tauri/gen/android/buildSrc/src/main/java/com/bilingify/readest/personal/kotlin/BuildTask.kt'), 'utf8'),
+    'package com.bilingify.readest.personal.kotlin\n');
   const env = await readFile(path.join(app, '.env.local'), 'utf8');
   assert.ok(env.includes('EXISTING_SETTING=keep'));
   assert.ok(env.includes(`NEXT_PUBLIC_GOOGLE_CLIENT_ID=${clientId}`));

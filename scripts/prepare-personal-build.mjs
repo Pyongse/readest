@@ -83,4 +83,23 @@ function prepareAndroid(directory) {
   }
 }
 if (fs.existsSync(androidDir)) prepareAndroid(androidDir);
+
+// Tauri also validates the physical Java package path, not only the namespace.
+function movePackageSources(packageDir) {
+  if (!fs.existsSync(packageDir)) return;
+  const root = fs.realpathSync(androidDir);
+  const source = fs.realpathSync(packageDir);
+  const target = path.join(source, 'personal');
+  if (!source.startsWith(`${root}${path.sep}`) ||
+      (fs.existsSync(target) && !fs.realpathSync(target).startsWith(`${root}${path.sep}`))) {
+    throw new Error('Android package paths must remain inside gen/android.');
+  }
+  fs.mkdirSync(target, { recursive: true });
+  for (const name of fs.readdirSync(source)) {
+    if (name !== 'personal') fs.renameSync(path.join(source, name), path.join(target, name));
+  }
+}
+for (const sourceRoot of ['app/src/main', 'app/src/test', 'buildSrc/src/main']) {
+  movePackageSources(path.join(androidDir, sourceRoot, 'java/com/bilingify/readest'));
+}
 console.log(`Readest Personal prepared: Google Drive ${clientId ? 'configured' : 'awaiting your OAuth client ID'}; custom API translation enabled.`);
