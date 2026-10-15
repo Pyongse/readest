@@ -1,6 +1,11 @@
 const COMMANDS: &[&str] = &[
     "auth_with_safari",
     "auth_with_custom_tab",
+    "google_drive_authorize",
+    "google_drive_clear_token",
+    "google_drive_loopback_start",
+    "google_drive_loopback_wait",
+    "google_drive_loopback_cancel",
     "copy_uri_to_path",
     "render_pdf_cover",
     "save_image_to_gallery",

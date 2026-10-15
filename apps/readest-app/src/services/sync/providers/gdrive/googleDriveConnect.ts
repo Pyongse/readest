@@ -7,7 +7,13 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { type as osType } from '@tauri-apps/plugin-os';
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
-import { getGoogleClientId, getGoogleWebClientId } from './buildGoogleDriveProvider';
+import {
+  getGoogleClientId,
+  getGoogleWebClientId,
+  isPersonalAndroidDrive,
+} from './buildGoogleDriveProvider';
+import { createAndroidDriveAuth } from './AndroidDriveAuth';
+import { runDesktopGoogleDriveOAuth } from './desktopGoogleDriveOAuth';
 import { createDriveTokenPersistence } from './driveTokenStore';
 import { runDesktopDeepLinkOAuth } from '@/services/sync/providers/oauth/oauthDesktop';
 import { runAndroidOAuth } from '@/services/sync/providers/oauth/oauthAndroid';
@@ -44,6 +50,7 @@ const resolveOAuthRunner = (): ((
   } catch {
     // osType() is Tauri-only; off-Tauri this path isn't reached anyway.
   }
+  if (process.env['NEXT_PUBLIC_PERSONAL_BUILD'] === 'true') return runDesktopGoogleDriveOAuth;
   return runDesktopDeepLinkOAuth;
 };
 
@@ -74,16 +81,25 @@ export const runGoogleDriveConnect = async (): Promise<ConnectGoogleDriveResult>
   if (!clientId) {
     throw new Error('Google Drive is not configured in this build');
   }
+  if (isPersonalAndroidDrive()) {
+    const auth = await createAndroidDriveAuth(clientId, resolveFetch());
+    if (!auth) throw new Error('Google Drive requires secure storage');
+    const result = await auth.connect();
+    resetFileSyncProviderCache();
+    return result;
+  }
   const persistence = await createDriveTokenPersistence();
   if (!persistence) {
     throw new Error('Google Drive requires a Readest app build with secure storage');
   }
-  return connectGoogleDrive({
+  const result = await connectGoogleDrive({
     clientId,
     fetchFn: resolveFetch(),
     persistence,
     runOAuth: resolveOAuthRunner(),
   });
+  resetFileSyncProviderCache();
+  return result;
 };
 
 /** Forget the stored Drive token (the settings flag is cleared by the caller). */
@@ -91,6 +107,11 @@ export const runGoogleDriveDisconnect = async (): Promise<void> => {
   resetFileSyncProviderCache();
   if (isWebAppPlatform()) {
     clearWebDriveToken();
+    return;
+  }
+  if (isPersonalAndroidDrive()) {
+    const clientId = getGoogleClientId();
+    if (clientId) await (await createAndroidDriveAuth(clientId, resolveFetch()))?.disconnect();
     return;
   }
   const persistence = await createDriveTokenPersistence();

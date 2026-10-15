@@ -1,6 +1,7 @@
 package com.readest.native_bridge
 
 import android.Manifest
+import android.accounts.Account
 import android.app.Activity
 import android.app.Application
 import android.app.PendingIntent
@@ -49,9 +50,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import app.tauri.annotation.Command
+import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.Permission
 import app.tauri.annotation.TauriPlugin
@@ -59,6 +63,12 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.ClearTokenRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
 import org.json.JSONArray
 import java.io.*
 import kotlin.math.abs
@@ -69,6 +79,17 @@ import kotlinx.coroutines.*
 class AuthRequestArgs {
     var authUrl: String? = null
     var callbackUrl: String? = null
+}
+
+@InvokeArg
+class GoogleDriveAuthorizeArgs {
+    var interactive: Boolean = false
+    var accountName: String? = null
+}
+
+@InvokeArg
+class GoogleDriveClearTokenArgs {
+    var accessToken: String = ""
 }
 
 @InvokeArg
@@ -247,6 +268,7 @@ interface KeyDownInterceptor {
 class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
     private val implementation = NativeBridge()
     private var webViewRef: WebView? = null
+    private var pendingGoogleDriveInvoke: Invoke? = null
     private val billingManager by lazy {
         BillingManager(activity)
     }
@@ -315,6 +337,8 @@ class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
     }
 
     override fun onDestroy() {
+        pendingGoogleDriveInvoke?.reject("AUTHORIZATION_CANCELLED: The app was closed during authorization")
+        pendingGoogleDriveInvoke = null
         stopAmbientLightUpdatesInternal()
         inputManager?.unregisterInputDeviceListener(gamepadInputListener)
         inputManager = null
@@ -577,6 +601,102 @@ class NativeBridgePlugin(private val activity: Activity): Plugin(activity) {
         pendingInvoke = invoke
         pendingAuthCallbackTarget = callbackTarget
         customTabsIntent.launchUrl(activity, uri)
+    }
+
+    @Command
+    fun google_drive_authorize(invoke: Invoke) {
+        val args = invoke.parseArgs(GoogleDriveAuthorizeArgs::class.java)
+        activity.runOnUiThread {
+            if (pendingGoogleDriveInvoke != null) {
+                invoke.reject("Google Drive authorization is already in progress")
+                return@runOnUiThread
+            }
+            val accountName = args.accountName?.takeIf { it.isNotBlank() }
+            if (!args.interactive && accountName == null) {
+                invoke.reject("AUTHORIZATION_REQUIRED: Reconnect Google Drive to select an account")
+                return@runOnUiThread
+            }
+            pendingGoogleDriveInvoke = invoke
+            try {
+                val request = AuthorizationRequest.builder()
+                    .setRequestedScopes(listOf(Scope(GoogleDriveAuthorization.SCOPE)))
+                    .setOptOutIncludingGrantedScopes(true)
+                if (args.interactive) {
+                    request.setPrompt(AuthorizationRequest.Prompt.SELECT_ACCOUNT)
+                } else {
+                    request.setAccount(Account(accountName!!, "com.google"))
+                }
+                Identity.getAuthorizationClient(activity).authorize(request.build())
+                    .addOnSuccessListener { result ->
+                        if (pendingGoogleDriveInvoke !== invoke) return@addOnSuccessListener
+                        try {
+                            if (result.hasResolution()) {
+                                GoogleDriveAuthorization.requireInteractive(args.interactive)
+                                val pendingIntent = checkNotNull(result.pendingIntent) {
+                                    "Google Drive authorization did not provide its consent activity"
+                                }
+                                startIntentSenderForResult(
+                                    invoke,
+                                    IntentSenderRequest.Builder(pendingIntent.intentSender).build(),
+                                    "googleDriveAuthorizationResult",
+                                )
+                            } else {
+                                resolveGoogleDriveAuthorization(invoke, result)
+                            }
+                        } catch (e: Exception) {
+                            rejectGoogleDriveAuthorization(invoke, e)
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        if (pendingGoogleDriveInvoke === invoke) rejectGoogleDriveAuthorization(invoke, e)
+                    }
+            } catch (e: Exception) {
+                rejectGoogleDriveAuthorization(invoke, e)
+            }
+        }
+    }
+
+    @ActivityCallback
+    fun googleDriveAuthorizationResult(invoke: Invoke, result: ActivityResult) {
+        if (pendingGoogleDriveInvoke !== invoke) return
+        try {
+            GoogleDriveAuthorization.requireAcceptedResult(result.resultCode == Activity.RESULT_OK)
+            val authorization = Identity.getAuthorizationClient(activity)
+                .getAuthorizationResultFromIntent(result.data)
+            resolveGoogleDriveAuthorization(invoke, authorization)
+        } catch (e: Exception) {
+            rejectGoogleDriveAuthorization(invoke, e)
+        }
+    }
+
+    private fun resolveGoogleDriveAuthorization(invoke: Invoke, result: AuthorizationResult) {
+        val token = GoogleDriveAuthorization.validateToken(result.accessToken, result.grantedScopes)
+        pendingGoogleDriveInvoke = null
+        invoke.resolve(JSObject().apply { put("accessToken", token) })
+    }
+
+    private fun rejectGoogleDriveAuthorization(invoke: Invoke, error: Exception) {
+        pendingGoogleDriveInvoke = null
+        // SDK exceptions can contain account details; expose only their status code.
+        val message = if (error is ApiException) {
+            "Google Drive authorization failed (Google Play services code ${error.statusCode})"
+        } else {
+            error.message ?: "Google Drive authorization failed"
+        }
+        invoke.reject(message)
+    }
+
+    @Command
+    fun google_drive_clear_token(invoke: Invoke) {
+        val args = invoke.parseArgs(GoogleDriveClearTokenArgs::class.java)
+        if (args.accessToken.isBlank()) {
+            invoke.reject("An access token is required to clear the Google Drive token cache")
+            return
+        }
+        Identity.getAuthorizationClient(activity)
+            .clearToken(ClearTokenRequest.builder().setToken(args.accessToken).build())
+            .addOnSuccessListener { invoke.resolve() }
+            .addOnFailureListener { invoke.reject("Failed to clear the Google Drive token cache") }
     }
 
     @Command

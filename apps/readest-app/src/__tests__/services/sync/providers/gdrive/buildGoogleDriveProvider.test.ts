@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('@tauri-apps/plugin-http', () => ({ fetch: vi.fn() }));
+vi.mock('@tauri-apps/plugin-os', () => ({ type: vi.fn(() => 'windows') }));
 vi.mock('@/services/environment', () => ({
   isTauriAppPlatform: vi.fn(),
   isWebAppPlatform: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock('@/utils/bridge', () => ({
 }));
 
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
+import { type as osType } from '@tauri-apps/plugin-os';
 import { isSyncKeychainAvailable } from '@/utils/bridge';
 import {
   buildGoogleDriveProvider,
@@ -31,16 +33,23 @@ describe('buildGoogleDriveProvider', () => {
   test('personal builds without OAuth configuration do not use the official client', async () => {
     vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
     vi.stubEnv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', '');
+    vi.stubEnv('NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID', '');
+    vi.stubEnv('NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID', '');
     vi.mocked(isTauriAppPlatform).mockReturnValue(true);
     expect(getGoogleClientId()).toBeUndefined();
     expect(await buildGoogleDriveProvider()).toBeNull();
     expect(isSyncKeychainAvailable).not.toHaveBeenCalled();
   });
 
-  test('personal builds use the configured client', () => {
+  test('personal builds select a matching client for each platform', () => {
     vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
-    vi.stubEnv('NEXT_PUBLIC_GOOGLE_CLIENT_ID', CLIENT_ID);
-    expect(getGoogleClientId()).toBe(CLIENT_ID);
+    vi.stubEnv('NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID', 'desktop.apps.googleusercontent.com');
+    vi.stubEnv('NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID', 'android.apps.googleusercontent.com');
+    vi.mocked(osType).mockReturnValue('windows');
+    expect(getGoogleClientId()).toBe('desktop.apps.googleusercontent.com');
+    vi.mocked(osType).mockReturnValue('android');
+    expect(getGoogleClientId()).toBe('android.apps.googleusercontent.com');
+    vi.mocked(osType).mockReturnValue('windows');
   });
 
   test('falls back to the baked official client id when the env override is unset', async () => {

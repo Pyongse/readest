@@ -76,6 +76,20 @@ describe('GoogleDriveProvider — streaming', () => {
     expect(typeof h.provider.downloadStream).toBe('function');
   });
 
+  test('a native download with a rejected token renews and retries once', async () => {
+    const invalidateAccessToken = vi.fn(async (_token: string) => {});
+    const fetchMock = vi.fn().mockResolvedValue(json({ files: [{ id: 'DID' }] }));
+    const provider = createGoogleDriveProvider({ ...auth, invalidateAccessToken }, fetchMock, {
+      sleep: async () => {},
+    });
+    vi.mocked(tauriDownload).mockRejectedValueOnce(
+      'request failed with status code 401: Invalid Credentials',
+    );
+    expect(await provider.downloadStream!('/book.epub', '/disk/book.epub')).toBe(true);
+    expect(invalidateAccessToken).toHaveBeenCalledExactlyOnceWith('TOKEN');
+    expect(tauriDownload).toHaveBeenCalledTimes(2);
+  });
+
   test('uploadStream creates a new file via a resumable session and streams the bytes', async () => {
     const h = makeDrive();
     stageFolders(h);

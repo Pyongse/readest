@@ -3,6 +3,11 @@ description = "Default permissions for the plugin"
 permissions = [
   "allow-auth-with-safari",
   "allow-auth-with-custom-tab",
+  "allow-google-drive-authorize",
+  "allow-google-drive-clear-token",
+  "allow-google-drive-loopback-start",
+  "allow-google-drive-loopback-wait",
+  "allow-google-drive-loopback-cancel",
   "allow-copy-uri-to-path",
   "allow-save-image-to-gallery",
   "allow-use-background-audio",

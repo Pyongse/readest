@@ -8,7 +8,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        minSdk = 21
+        minSdk = 24 // Google Identity authorization requires Android 7.0; the app requires 8.0.
         targetSdk = 36 // Keep the instrumented test APK aligned with the app.
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -74,6 +74,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.browser:browser:1.8.0")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
     implementation("androidx.webkit:webkit:1.14.0")
     implementation("com.google.android.material:material:1.7.0")
     // EncryptedSharedPreferences (sync passphrase keychain backing).

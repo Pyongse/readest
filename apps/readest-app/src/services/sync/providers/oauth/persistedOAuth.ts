@@ -8,7 +8,12 @@
  * provider name (for error messages) are injected.
  */
 import { FileSyncError } from '@/services/sync/file/provider';
-import { refreshAccessToken, type FetchFn, type TokenSet } from './tokenEndpoint';
+import {
+  refreshAccessToken,
+  TokenEndpointError,
+  type FetchFn,
+  type TokenSet,
+} from './tokenEndpoint';
 import type { TokenPersistence } from './keychainTokenStore';
 
 export interface PersistedOAuthDeps {
@@ -81,6 +86,14 @@ export class PersistedOAuth {
         this.tokens = merged;
         await this.deps.persistence.save(merged);
         return merged;
+      } catch (error) {
+        if (error instanceof TokenEndpointError && error.code === 'invalid_grant') {
+          throw new FileSyncError(
+            `${this.deps.providerLabel} authorization expired; reconnect`,
+            'AUTH_FAILED',
+          );
+        }
+        throw error;
       } finally {
         this.refreshInFlight = null;
       }

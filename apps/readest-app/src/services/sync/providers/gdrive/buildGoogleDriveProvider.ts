@@ -10,12 +10,14 @@
  * half-built provider that would fail on first use.
  */
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { type as osType } from '@tauri-apps/plugin-os';
 import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import type { FileSyncProvider } from '@/services/sync/file/provider';
 import { createGoogleDriveProvider, type FetchFn } from './GoogleDriveProvider';
 import { createGoogleDriveAuth } from './googleDriveAuth';
 import { WebDriveAuth } from './WebDriveAuth';
 import { createDriveTokenPersistence } from './driveTokenStore';
+import { createAndroidDriveAuth } from './AndroidDriveAuth';
 
 /**
  * The official Readest Google OAuth client id (iOS application type, no secret),
@@ -30,9 +32,25 @@ import { createDriveTokenPersistence } from './driveTokenStore';
 const OFFICIAL_GOOGLE_CLIENT_ID =
   '209390247301-ctpmep68ppfa56r1b8tr35e4qi4p60kq.apps.googleusercontent.com';
 
-export const getGoogleClientId = (): string | undefined =>
-  process.env['NEXT_PUBLIC_GOOGLE_CLIENT_ID'] ||
-  (process.env['NEXT_PUBLIC_PERSONAL_BUILD'] === 'true' ? undefined : OFFICIAL_GOOGLE_CLIENT_ID);
+export const isPersonalAndroidDrive = (): boolean => {
+  if (process.env['NEXT_PUBLIC_PERSONAL_BUILD'] !== 'true') return false;
+  try {
+    return osType() === 'android';
+  } catch {
+    return false;
+  }
+};
+
+export const getGoogleClientId = (): string | undefined => {
+  if (process.env['NEXT_PUBLIC_PERSONAL_BUILD'] === 'true') {
+    return (
+      (isPersonalAndroidDrive()
+        ? process.env['NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID']
+        : process.env['NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID']) || undefined
+    );
+  }
+  return process.env['NEXT_PUBLIC_GOOGLE_CLIENT_ID'] || OFFICIAL_GOOGLE_CLIENT_ID;
+};
 
 /**
  * The official Readest **Web-type** Google OAuth client id used by the browser
@@ -69,12 +87,17 @@ export const buildGoogleDriveProvider = async (): Promise<FileSyncProvider | nul
   const clientId = getGoogleClientId();
   if (!clientId) return null;
 
+  const fetchFn = resolveFetch();
+  if (isPersonalAndroidDrive()) {
+    const auth = await createAndroidDriveAuth(clientId, fetchFn);
+    return auth ? createGoogleDriveProvider(auth, fetchFn) : null;
+  }
+
   // No ephemeral fallback for the refresh token: if secure storage is missing,
   // Drive is simply not available here.
   const persistence = await createDriveTokenPersistence();
   if (!persistence) return null;
 
-  const fetchFn = resolveFetch();
   const auth = createGoogleDriveAuth({ clientId, fetchFn, persistence });
   return createGoogleDriveProvider(auth, fetchFn);
 };

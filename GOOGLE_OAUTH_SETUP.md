@@ -1,6 +1,6 @@
 # Readest Personal：自己的 Google Drive 授权配置指南
 
-核对日期：2026-10-14。适用设备：Windows 电脑、Android 手机。以下按个人 Gmail 账号、自己使用、安装私人版 APK 的情况说明。
+核对日期：2026-10-15。适用设备：Windows 电脑、Android 手机。以下按个人 Gmail 账号、自己使用、安装私人版 APK 的情况说明。
 
 你负责登录 Google、创建项目和确认授权；把完成后的 **Windows Client ID 与 Android Client ID** 发给我，我负责接入源码、设置构建参数和重新生成安装包。无需提供 Google 密码、验证码、Client Secret、访问令牌或签名私钥。
 
@@ -8,7 +8,7 @@
 
 原源码沿用 Readest 的一个 iOS 类型客户端与自定义回调，试图在 Windows 和 Android 共用。重新核对 Google 官方政策后，**这条路线停止作为配置建议**：Google 要求为每个平台创建匹配类型的独立 OAuth 客户端；Android 类型客户端也不支持原来的自定义 URI 回调。正确方向是：**同一个 Google Cloud 项目，分别创建 Desktop app 和 Android 客户端，并让代码使用对应的平台授权方式**。[Google OAuth 平台客户端政策](https://developers.google.com/identity/protocols/oauth2/policies)、[原生应用回调要求](https://developers.google.com/identity/protocols/oauth2/native-app)
 
-因此，下面的账号配置可以先完成，但当前安装包的 Google 登录流程仍需适配。Windows 需要桌面回调适配，Android 需要原生授权适配；由我处理这些源码和构建改动，然后再进行真实登录与同步验收。**不要把 Desktop 或 Android ID 直接替换到现有单个 `GOOGLE_CLIENT_ID` 变量后就认为已经接通。**
+对应的授权流程现已接入私人版源码：Windows 使用桌面回调和 PKCE，Android 使用原生授权。创建下面的账号配置后，分别填入 `GOOGLE_DESKTOP_CLIENT_ID` 和 `GOOGLE_ANDROID_CLIENT_ID` 并重新构建。请使用这次适配后的新安装包，再进行真实登录与同步验收。
 
 Google 建议同一应用的不同平台客户端放在同一项目，方便管理和跨客户端授权；这里按这个结构创建。两端是否能访问同一批 `drive.file` 文件，仍要通过后面的双设备测试确认。[Google 官方多客户端项目说明](https://developers.googleblog.com/en/get-smart-about-preparing-your-app-for-oauth-verification/)
 
@@ -170,7 +170,7 @@ Client ID 属于公开应用标识，通常会随安装包分发；它本身不�
 
 一般由我完成这一步。你若以后自己操作：打开 [Pyongse/readest](https://github.com/Pyongse/readest) → Settings → Secrets and variables → Actions → Variables → New repository variable，按**完成平台授权适配后的构建说明**添加对应的公开 Client ID 变量；不要使用 Secrets 存放应用的访问令牌。
 
-目前旧工作流只有单个 `GOOGLE_CLIENT_ID`，不能用它表达这次两个平台的配置。先等源码与工作流适配完成，变量名称以更新后的 `PERSONAL.md` 和工作流为准。之后在 Actions → Build Readest Personal → Run workflow，选择 `personal-drive` 分支运行；下载成功的两个平台产物。
+当前工作流使用两个 Variable：`GOOGLE_DESKTOP_CLIENT_ID` 和 `GOOGLE_ANDROID_CLIENT_ID`，分别填写对应的公开 ID。之后在 Actions → Build Readest Personal → Run workflow，选择 `personal-drive` 分支运行；下载成功的两个平台产物。Android 账号选择与授权由 Google Play services 处理，无需为本次同步创建 Web server 客户端。
 
 ## 10. 新包到手后的登录与同步验收
 

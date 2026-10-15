@@ -3,15 +3,19 @@ import path from 'node:path';
 
 const app = path.resolve('apps/readest-app');
 const tauriDir = path.join(app, 'src-tauri');
-const clientId = (process.env.GOOGLE_CLIENT_ID ?? '').trim();
-if (clientId && !/^\d+-[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test(clientId)) {
-  throw new Error('GOOGLE_CLIENT_ID must be a Google OAuth client ID, without a secret or extra lines.');
+const desktopId = (process.env.GOOGLE_DESKTOP_CLIENT_ID ?? '').trim();
+const androidId = (process.env.GOOGLE_ANDROID_CLIENT_ID ?? '').trim();
+for (const id of [desktopId, androidId]) {
+  if (id && !/^\d+-[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test(id)) {
+    throw new Error('Google OAuth client IDs must not contain secrets or extra lines.');
+  }
+}
+if (Boolean(desktopId) !== Boolean(androidId) ||
+    (desktopId && desktopId.split('-')[0] !== androidId.split('-')[0])) {
+  throw new Error('Configure both desktop and Android clients from the same Google Cloud project.');
 }
 
 const identifier = 'com.bilingify.readest.personal';
-const googleScheme = clientId
-  ? `com.googleusercontent.apps.${clientId.replace('.apps.googleusercontent.com', '').toLowerCase()}`
-  : undefined;
 const isGoogleScheme = (scheme) => scheme.startsWith('com.googleusercontent.apps.');
 const configPath = path.join(tauriDir, 'tauri.conf.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
@@ -28,10 +32,6 @@ deepLink.desktop.schemes = deepLink.desktop.schemes.filter((scheme) => !isGoogle
 deepLink.mobile = deepLink.mobile
   .map((entry) => ({ ...entry, scheme: entry.scheme.filter((scheme) => !isGoogleScheme(scheme)) }))
   .filter((entry) => entry.scheme.length > 0);
-if (googleScheme) {
-  deepLink.desktop.schemes.push(googleScheme);
-  deepLink.mobile.push({ scheme: [googleScheme], appLink: false });
-}
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
 const envPath = path.join(app, '.env.local');
@@ -41,7 +41,9 @@ const values = {
   NEXT_PUBLIC_PERSONAL_BUILD: 'true',
   NEXT_PUBLIC_SELF_HOSTED: 'true',
   NEXT_PUBLIC_DISABLE_UPDATER: 'true',
-  NEXT_PUBLIC_GOOGLE_CLIENT_ID: clientId,
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: '',
+  NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID: desktopId,
+  NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: androidId,
 };
 for (const [key, value] of Object.entries(values)) {
   const line = `${key}=${value}`;
@@ -73,10 +75,9 @@ function prepareAndroid(directory) {
         '$1Readest Personal$2');
       if (entry.name === 'AndroidManifest.xml') {
         text = text.replace('android:label="Readest"', 'android:label="Readest Personal"');
-        // Keep an inert scheme until a real OAuth client is supplied.
+        // Native Android authorization does not use a Google custom URI callback.
         text = text.replace(/com\.googleusercontent\.apps\.[0-9A-Za-z-]+/g,
-          googleScheme ?? 'readest-personal-unconfigured');
-        if (googleScheme) text = text.replaceAll('readest-personal-unconfigured', googleScheme);
+          'readest-personal-unconfigured');
       }
       if (text !== original) fs.writeFileSync(file, text);
     }
@@ -102,4 +103,4 @@ function movePackageSources(packageDir) {
 for (const sourceRoot of ['app/src/main', 'app/src/test', 'buildSrc/src/main']) {
   movePackageSources(path.join(androidDir, sourceRoot, 'java/com/bilingify/readest'));
 }
-console.log(`Readest Personal prepared: Google Drive ${clientId ? 'configured' : 'awaiting your OAuth client ID'}; custom API translation enabled.`);
+console.log(`Readest Personal prepared: Google OAuth clients ${desktopId ? 'configured by platform' : 'awaiting configuration'}; custom API translation enabled.`);

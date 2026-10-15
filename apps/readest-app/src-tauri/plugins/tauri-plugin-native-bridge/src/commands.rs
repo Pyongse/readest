@@ -6,6 +6,102 @@ use crate::DirectoryCallbackState;
 use crate::NativeBridgeExt;
 use crate::Result;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GoogleDriveLoopbackSession {
+    id: String,
+    redirect_uri: String,
+}
+
+#[command]
+pub(crate) fn google_drive_loopback_start(
+    state: String,
+) -> std::result::Result<GoogleDriveLoopbackSession, String> {
+    #[cfg(desktop)]
+    {
+        let session = crate::oauth_loopback::start(&state)?;
+        Ok(GoogleDriveLoopbackSession {
+            id: session.id,
+            redirect_uri: session.redirect_uri,
+        })
+    }
+    #[cfg(mobile)]
+    {
+        let _ = state;
+        Err("Desktop OAuth is unavailable on this platform".into())
+    }
+}
+
+#[command]
+pub(crate) async fn google_drive_loopback_wait(id: String) -> std::result::Result<String, String> {
+    #[cfg(desktop)]
+    {
+        tauri::async_runtime::spawn_blocking(move || crate::oauth_loopback::await_redirect(&id))
+            .await
+            .map_err(|err| err.to_string())?
+    }
+    #[cfg(mobile)]
+    {
+        let _ = id;
+        Err("Desktop OAuth is unavailable on this platform".into())
+    }
+}
+
+#[command]
+pub(crate) fn google_drive_loopback_cancel(id: String) -> std::result::Result<(), String> {
+    #[cfg(desktop)]
+    {
+        crate::oauth_loopback::cancel(&id)
+    }
+    #[cfg(mobile)]
+    {
+        let _ = id;
+        Err("Desktop OAuth is unavailable on this platform".into())
+    }
+}
+
+#[command]
+pub(crate) async fn google_drive_authorize<R: Runtime>(
+    app: AppHandle<R>,
+    payload: GoogleDriveAuthorizeRequest,
+) -> std::result::Result<GoogleDriveAuthorizeResponse, String> {
+    #[cfg(mobile)]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            app.native_bridge().google_drive_authorize(payload)
+        })
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|err| err.to_string())
+    }
+    #[cfg(desktop)]
+    {
+        let _ = (app, payload);
+        Err("Android Google authorization is unavailable on this platform".into())
+    }
+}
+
+#[command]
+pub(crate) async fn google_drive_clear_token<R: Runtime>(
+    app: AppHandle<R>,
+    payload: GoogleDriveClearTokenRequest,
+) -> std::result::Result<(), String> {
+    #[cfg(mobile)]
+    {
+        tauri::async_runtime::spawn_blocking(move || {
+            app.native_bridge().google_drive_clear_token(payload)
+        })
+        .await
+        .map_err(|err| err.to_string())?
+        .map_err(|err| err.to_string())
+    }
+    #[cfg(desktop)]
+    {
+        let _ = (app, payload);
+        Err("Android Google authorization is unavailable on this platform".into())
+    }
+}
+
 #[command]
 pub(crate) async fn auth_with_safari<R: Runtime>(
     app: AppHandle<R>,

@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import React, { useState } from 'react';
 import { useEnv } from '@/context/EnvContext';
 import { useTranslation } from '@/hooks/useTranslation';
-import { isWebAppPlatform } from '@/services/environment';
+import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import { useSettingsStore } from '@/store/settingsStore';
 import { eventDispatcher } from '@/utils/event';
 import {
@@ -58,6 +58,8 @@ const GoogleDriveForm: React.FC = () => {
   // the user-facing "session expired" notice is a one-time toast in the reader
   // (see useFileSync), not a hint here.
   const sessionExpired = isActive && isWebAppPlatform() && !hasValidWebDriveToken();
+  const isPersonalNative =
+    process.env['NEXT_PUBLIC_PERSONAL_BUILD'] === 'true' && isTauriAppPlatform();
 
   const persistGDrive = async (patch: Partial<typeof stored>) => {
     const latest = useSettingsStore.getState().settings;
@@ -107,6 +109,24 @@ const GoogleDriveForm: React.FC = () => {
     eventDispatcher.dispatch('toast', { type: 'info', message: _('Disconnected') });
   };
 
+  const reconnectButton = (
+    <button
+      type='button'
+      onClick={handleConnect}
+      disabled={isConnecting}
+      className={clsx(primaryButtonClass, isConnecting && 'opacity-60')}
+    >
+      {isConnecting ? (
+        <>
+          <span className='loading loading-spinner loading-sm' />
+          {_('Waiting for sign-in…')}
+        </>
+      ) : (
+        _('Reconnect')
+      )}
+    </button>
+  );
+
   if (isActive) {
     return (
       <div className='space-y-5'>
@@ -116,28 +136,18 @@ const GoogleDriveForm: React.FC = () => {
           persist={persistGDrive}
           syncNowDisabled={sessionExpired}
         />
-        <div className='flex justify-end'>
-          {sessionExpired ? (
+        <div className='flex flex-wrap justify-end gap-2'>
+          {!sessionExpired && (
             <button
               type='button'
-              onClick={handleConnect}
+              onClick={handleDisconnect}
               disabled={isConnecting}
-              className={clsx(primaryButtonClass, isConnecting && 'opacity-60')}
+              className={disconnectButtonClass}
             >
-              {isConnecting ? (
-                <>
-                  <span className='loading loading-spinner loading-sm' />
-                  {_('Waiting for sign-in…')}
-                </>
-              ) : (
-                _('Reconnect')
-              )}
-            </button>
-          ) : (
-            <button type='button' onClick={handleDisconnect} className={disconnectButtonClass}>
               {_('Disconnect')}
             </button>
           )}
+          {(sessionExpired || isPersonalNative) && reconnectButton}
         </div>
       </div>
     );
@@ -146,13 +156,24 @@ const GoogleDriveForm: React.FC = () => {
   if (isConfigured) {
     return (
       <div className='space-y-5'>
-        <div className='flex justify-end gap-2'>
-          <button type='button' onClick={handleDisconnect} className={disconnectButtonClass}>
+        <div className='flex flex-wrap justify-end gap-2'>
+          <button
+            type='button'
+            onClick={handleDisconnect}
+            disabled={isConnecting}
+            className={disconnectButtonClass}
+          >
             {_('Disconnect')}
           </button>
-          <button type='button' onClick={handleActivate} className={primaryButtonClass}>
+          <button
+            type='button'
+            onClick={handleActivate}
+            disabled={isConnecting}
+            className={primaryButtonClass}
+          >
             {_('Use Google Drive')}
           </button>
+          {isPersonalNative && reconnectButton}
         </div>
         <Tips>
           <li>

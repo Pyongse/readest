@@ -38,6 +38,40 @@ impl<R: Runtime> NativeBridge<R> {
             .run_mobile_plugin("auth_with_custom_tab", payload)
             .map_err(Into::into)
     }
+
+    pub fn google_drive_authorize(
+        &self,
+        payload: GoogleDriveAuthorizeRequest,
+    ) -> crate::Result<GoogleDriveAuthorizeResponse> {
+        #[cfg(target_os = "android")]
+        {
+            self.0
+                .run_mobile_plugin("google_drive_authorize", payload)
+                .map_err(Into::into)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = payload;
+            Err(crate::Error::UnsupportedPlatformError)
+        }
+    }
+
+    pub fn google_drive_clear_token(
+        &self,
+        payload: GoogleDriveClearTokenRequest,
+    ) -> crate::Result<()> {
+        #[cfg(target_os = "android")]
+        {
+            self.0
+                .run_mobile_plugin("google_drive_clear_token", payload)
+                .map_err(Into::into)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = payload;
+            Err(crate::Error::UnsupportedPlatformError)
+        }
+    }
 }
 
 impl<R: Runtime> NativeBridge<R> {

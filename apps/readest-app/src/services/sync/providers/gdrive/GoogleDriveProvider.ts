@@ -62,6 +62,8 @@ import {
 export interface DriveAuth {
   /** A currently-valid access token; refreshes under the hood as needed. */
   getAccessToken(): Promise<string>;
+  /** Native Google services can evict a rejected cached token before renewal. */
+  invalidateAccessToken?(token: string): Promise<void>;
 }
 
 /**
@@ -798,9 +800,19 @@ class DriveProviderImpl {
       const fileId = await this.resolveFile(remotePath);
       if (fileId === null) return false;
       const token = await this.auth.getAccessToken();
-      await tauriDownload(mediaDownloadUrl(fileId), localPath, onProgress, {
-        Authorization: `Bearer ${token}`,
-      });
+      const download = (bearer: string) =>
+        tauriDownload(mediaDownloadUrl(fileId), localPath, onProgress, {
+          Authorization: `Bearer ${bearer}`,
+        });
+      try {
+        await download(token);
+      } catch (error) {
+        // transfer_file.rs reports HTTP failures with this status-code prefix.
+        if (!this.auth.invalidateAccessToken || !/\bstatus code 401\b/.test(String(error)))
+          throw error;
+        await this.auth.invalidateAccessToken(token);
+        await download(await this.auth.getAccessToken());
+      }
       return true;
     } catch (e) {
       console.warn('GoogleDriveProvider.downloadStream failed', remotePath, e);
@@ -812,17 +824,27 @@ class DriveProviderImpl {
 
   /** Issue an authenticated Drive request, retried on transient failures. */
   private async authedFetch(url: string, method: string, init?: RequestInit): Promise<Response> {
+    let authRetried = false;
     return this.withBackoff(async () => {
       if (LOG_DRIVE_REQUESTS) {
         driveRequestSeq += 1;
         console.log(`[gdrive] #${driveRequestSeq} ${method} ${describeDriveRequest(url, method)}`);
       }
-      const token = await this.auth.getAccessToken();
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${token}`,
-        ...(init?.headers as Record<string, string> | undefined),
+      const request = async (token: string) => {
+        const headers: Record<string, string> = {
+          Authorization: `Bearer ${token}`,
+          ...(init?.headers as Record<string, string> | undefined),
+        };
+        return this.fetchFn(url, { ...init, method, headers });
       };
-      return this.fetchFn(url, { ...init, method, headers });
+      const token = await this.auth.getAccessToken();
+      const res = await request(token);
+      if (res.status === HTTP_UNAUTHORIZED && !authRetried && this.auth.invalidateAccessToken) {
+        authRetried = true;
+        await this.auth.invalidateAccessToken(token);
+        return request(await this.auth.getAccessToken());
+      }
+      return res;
     });
   }
 

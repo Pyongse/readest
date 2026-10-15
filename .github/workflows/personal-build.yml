@@ -49,7 +49,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 110
     env:
-      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.GOOGLE_DESKTOP_CLIENT_ID }}
+      GOOGLE_ANDROID_CLIENT_ID: ${{ vars.GOOGLE_ANDROID_CLIENT_ID }}
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,6 +64,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: ${{ matrix.target }}
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           key: personal-${{ matrix.platform }}
@@ -123,6 +125,14 @@ jobs:
         run: |
           pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo fmt -p Readest -p tauri-plugin-native-bridge --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy -p Readest -p tauri-plugin-native-bridge --target x86_64-pc-windows-msvc --release --no-deps -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p tauri-plugin-native-bridge --target x86_64-pc-windows-msvc --release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p Readest --lib --target x86_64-pc-windows-msvc --release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Get-ChildItem -Path target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe)) {
             throw 'Windows installer was not produced'
           }
@@ -132,6 +142,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm tauri android build -t aarch64 --apk
+          (cd apps/readest-app/src-tauri/gen/android && ./gradlew :tauri-plugin-native-bridge:testFossGenericPenDebugUnitTest)
           apk=apps/readest-app/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
           test -f "$apk"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
@@ -140,7 +151,7 @@ jobs:
         run: |
           git rev-parse HEAD > personal-build-inputs.txt
           git submodule status >> personal-build-inputs.txt
-          printf '\nGoogle OAuth client ID (public): %s\n' "$GOOGLE_CLIENT_ID" >> personal-build-inputs.txt
+          printf '\nGoogle Desktop OAuth client ID (public): %s\nGoogle Android OAuth client ID (public): %s\n' "$GOOGLE_DESKTOP_CLIENT_ID" "$GOOGLE_ANDROID_CLIENT_ID" >> personal-build-inputs.txt
       - uses: actions/upload-artifact@v4
         with:
           name: readest-personal-${{ matrix.platform }}

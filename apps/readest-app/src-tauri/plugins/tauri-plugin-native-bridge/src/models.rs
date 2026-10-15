@@ -19,6 +19,26 @@ pub struct AuthResponse {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GoogleDriveAuthorizeRequest {
+    pub interactive: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleDriveAuthorizeResponse {
+    pub access_token: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoogleDriveClearTokenRequest {
+    pub access_token: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CopyURIRequest {
     pub uri: String,
     pub dst: String,

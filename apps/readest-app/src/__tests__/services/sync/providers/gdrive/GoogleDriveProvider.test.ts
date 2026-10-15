@@ -52,6 +52,36 @@ runSemanticContract('GoogleDriveProvider', () => {
 });
 
 describe('GoogleDriveProvider — Drive transport', () => {
+  test('evicts a rejected native token and retries once with a new bearer', async () => {
+    const getAccessToken = vi.fn().mockResolvedValueOnce('OLD').mockResolvedValue('NEW');
+    const invalidateAccessToken = vi.fn(async (_token: string) => {});
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({}, 401))
+      .mockResolvedValue(json({ files: [] }));
+    const provider = createGoogleDriveProvider(
+      { getAccessToken, invalidateAccessToken },
+      fetchMock,
+      { sleep: async () => {} },
+    );
+    expect(await provider.list('/')).toEqual([]);
+    expect(invalidateAccessToken).toHaveBeenCalledExactlyOnceWith('OLD');
+    expect((fetchMock.mock.calls[1]![1] as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer NEW',
+    });
+  });
+
+  test('a repeated 401 ends as an authentication failure rather than an infinite retry', async () => {
+    const invalidateAccessToken = vi.fn(async (_token: string) => {});
+    const fetchMock = vi.fn().mockResolvedValue(json({}, 401));
+    const provider = createGoogleDriveProvider({ ...auth, invalidateAccessToken }, fetchMock, {
+      sleep: async () => {},
+    });
+    await expect(provider.list('/')).rejects.toMatchObject({ code: 'AUTH_FAILED' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(invalidateAccessToken).toHaveBeenCalledOnce();
+  });
+
   test('readText resolves the path segment-by-segment then downloads, and caches ids', async () => {
     const h = makeDrive();
     h.fetchMock

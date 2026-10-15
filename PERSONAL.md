@@ -7,7 +7,7 @@
 - 保留 Readest 的同步引擎、冲突处理、OAuth PKCE 和安全令牌存储。
 - 通过上游的 `NEXT_PUBLIC_SELF_HOSTED=true` 开放第三方同步和自定义翻译服务，无需购买 Readest 会员。这也会开放上游归入同一自托管开关的其他本地功能；官方付费服务器仍按其自己的权限处理请求。
 - 私人版名称是 **Readest Personal**，应用标识是 `com.bilingify.readest.personal`。默认数据目录与官方安装分离；桌面凭据使用独立的 `Readest Personal Safe Storage` 名称，避免共用原版的 Drive 令牌和同步口令。若手动选择自定义书库目录，也应选择独立目录。
-- 当前安装包未配置 Google OAuth，不使用 Readest 官方的 Google 客户端。本地阅读和自定义翻译可先使用；Drive 登录须完成下述分平台适配和真实测试。
+- 私人版分别接入自己的 Desktop 和 Android OAuth 客户端。Windows 使用系统浏览器、PKCE 和本机随机端口回调；Android 使用 Google 原生授权 SDK，后台续期固定已连接账号。真实登录与双端同步仍需设备验收。
 - 关闭官方自动更新，后续从自己的构建产物安装更新。私人版 Windows 安装器不注册与官方共享的缩略图处理器。
 - GitHub Actions 包含完整单元测试、类型检查、Windows x64 NSIS 安装器和 Android arm64 签名 APK 构建。
 
@@ -18,12 +18,13 @@
 1. Fork [readest/readest](https://github.com/readest/readest)，将本地 `personal-drive` 分支推到自己的 Fork。改动补丁可以应用在上述上游提交上。
 2. 在 Fork 的 Actions 页面启用工作流。`personal-drive` 的相关代码推送会触发 **Build Readest Personal**。如果需要页面上的手动运行按钮，将 `personal-drive` 设为 Fork 默认分支。
 3. 配置下表的 Android 签名 Secrets。它们必须长期保持一致，才能覆盖更新已经安装的私人版 APK。
-4. Google Cloud 配置按 [详细操作指南](GOOGLE_OAUTH_SETUP.md) 创建同一项目下的 Desktop 和 Android 客户端。当前源码仍保留上游的共享客户端实现，须先适配对应平台的授权流程，再接入客户端配置重新构建；不要直接把这两个 ID 填到现有的共享变量中。
+4. Google Cloud 配置按 [详细操作指南](GOOGLE_OAUTH_SETUP.md) 创建同一项目下的 Desktop 和 Android 客户端，分别设置下表的两个仓库 Variable。构建脚本要求两者同时配置、属于同一项目，也允许两者都留空以生成仅用于本地阅读的版本。
 5. 通过后，在工作流的 Artifacts 中下载 `readest-personal-windows` 和 `readest-personal-android`。保留期为 30 天。每个包带有源码提交、子模块提交和公开客户端 ID 的构建记录。
 
 | 类型 | 名称 | 内容 |
 | --- | --- | --- |
-| Variable | `GOOGLE_CLIENT_ID` | 现有构建脚本的上游共享客户端输入；当前保持留空，待分平台授权适配 |
+| Variable | `GOOGLE_DESKTOP_CLIENT_ID` | 自己 Google Cloud 项目的 Desktop app 客户端 ID |
+| Variable | `GOOGLE_ANDROID_CLIENT_ID` | 同一项目的 Android 客户端 ID；包名和签名指纹须匹配私人版 |
 | Secret | `ANDROID_KEY_BASE64` | 固定 JKS 签名文件的 Base64 内容 |
 | Secret | `ANDROID_KEY_ALIAS` | 签名证书别名 |
 | Secret | `ANDROID_KEY_PASSWORD` | 签名文件与证书共用的密码 |
@@ -38,7 +39,9 @@
 
 Google [OAuth 政策](https://developers.google.com/identity/protocols/oauth2/policies)要求各平台分别注册匹配类型的客户端。之前沿用上游共用 iOS 客户端的方案不应作为 Windows、Android 的正式接入方案，现已停止推荐。
 
-请按 [Google Cloud 详细操作指南](GOOGLE_OAUTH_SETUP.md)在同一个 Cloud 项目创建 **Desktop app** 和 **Android** 两个客户端。Windows 需要适配系统浏览器、PKCE 和本机 loopback 回调；Android 需要适配 Google 原生授权 SDK。当前源码尚未完成这些适配，不能仅换客户端 ID 就视为已可登录。两端使用同一项目和同一 Google 账号，仍需验证 `drive.file` 文件互见及同步行为。
+请按 [Google Cloud 详细操作指南](GOOGLE_OAUTH_SETUP.md)在同一个 Cloud 项目创建 **Desktop app** 和 **Android** 两个客户端。对应的 Windows 回调和 Android 原生授权已接入私人版；两端使用同一项目和同一 Google 账号，仍需验证 `drive.file` 文件互见及同步行为。现有基础安装包不含此配置，必须使用完成这次授权适配后重新构建的安装包。
+
+Android 需要可用的 Google Play services。它只在系统安全存储中保存账号和客户端绑定记录，访问令牌留在内存，续期由 Google 服务处理；Windows 的刷新令牌保存在独立系统凭据库。断开连接只清除本机连接，不撤销同一项目其他设备的 Google 授权。需要重新授权时，在“设置 → 集成 → Google Drive”点击“重新连接”。
 
 Android 的包名为 `com.bilingify.readest.personal`，固定签名证书 SHA-1 为 `4A:5D:3F:F0:98:C9:C3:3B:FE:5E:C5:08:F6:7C:18:43:39:E0:91:A4`。
 
@@ -76,7 +79,7 @@ pnpm test --run --maxWorkers=4
 pnpm lint
 ```
 
-Windows 构建前（有 Client ID 时先设置 `$env:GOOGLE_CLIENT_ID`）：
+Windows 构建前，先设置 `$env:GOOGLE_DESKTOP_CLIENT_ID` 和 `$env:GOOGLE_ANDROID_CLIENT_ID`：
 
 ```powershell
 node scripts/prepare-personal-build.mjs

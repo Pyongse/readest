@@ -42,6 +42,10 @@ vi.mock('@/services/sync/providers/gdrive/googleDriveConnect', () => ({
 }));
 
 import GoogleDriveForm from '@/components/settings/integrations/GoogleDriveForm';
+import {
+  runGoogleDriveConnect,
+  runGoogleDriveDisconnect,
+} from '@/services/sync/providers/gdrive/googleDriveConnect';
 
 const bothEnabled = {
   version: 1,
@@ -57,6 +61,8 @@ const bothEnabled = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'false');
+  vi.stubEnv('NEXT_PUBLIC_APP_PLATFORM', 'tauri');
   useSettingsStore.setState({ settings: bothEnabled } as never);
   useLibraryStore.setState({ library: [], libraryLoaded: true } as never);
   useFileSyncStore.setState({ byKind: {}, activeKind: null, lastErrorByKind: {} });
@@ -64,6 +70,64 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
+});
+
+describe('GoogleDriveForm personal native reconnect', () => {
+  test('renews an active connection without disconnecting other providers', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
+    vi.mocked(runGoogleDriveConnect).mockResolvedValue({ accountLabel: 'new@example.com' });
+    render(<GoogleDriveForm />);
+
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().settings.googleDrive.accountLabel).toBe('new@example.com');
+    });
+    expect(useSettingsStore.getState().settings.googleDrive.enabled).toBe(true);
+    expect(useSettingsStore.getState().settings.webdav).toEqual(bothEnabled.webdav);
+    expect(runGoogleDriveDisconnect).not.toHaveBeenCalled();
+  });
+
+  test('keeps the existing connection when renewal fails', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
+    vi.mocked(runGoogleDriveConnect).mockRejectedValue(new Error('Sign-in cancelled'));
+    render(<GoogleDriveForm />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Reconnect' }).hasAttribute('disabled')).toBe(
+        false,
+      );
+    });
+    expect(useSettingsStore.getState().settings.googleDrive).toEqual(bothEnabled.googleDrive);
+    expect(runGoogleDriveDisconnect).not.toHaveBeenCalled();
+  });
+
+  test('can reconnect a configured connection while syncing is switched off', async () => {
+    vi.stubEnv('NEXT_PUBLIC_PERSONAL_BUILD', 'true');
+    useSettingsStore.setState({
+      settings: { ...bothEnabled, googleDrive: { ...bothEnabled.googleDrive, enabled: false } },
+    } as never);
+    vi.mocked(runGoogleDriveConnect).mockResolvedValue({ accountLabel: 'alice@example.com' });
+    render(<GoogleDriveForm />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+
+    await waitFor(() => {
+      expect(useSettingsStore.getState().settings.googleDrive.enabled).toBe(true);
+    });
+    expect(useSettingsStore.getState().settings.webdav.enabled).toBe(true);
+  });
+
+  test('does not add native reconnect to the official build', () => {
+    render(<GoogleDriveForm />);
+
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+  });
 });
 
 describe('GoogleDriveForm disconnect (#5062 regression)', () => {

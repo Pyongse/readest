@@ -25,6 +25,18 @@ const makePersistence = (initial: TokenSet | null = null) => {
 const stubResolveAccountLabel = vi.fn(async () => 'stub-label');
 
 describe('PersistedOAuth', () => {
+  test('a revoked refresh token asks the user to reconnect', async () => {
+    const auth = new PersistedOAuth({
+      clientId: 'cid',
+      tokenEndpoint: TOKEN_ENDPOINT,
+      fetchFn: vi.fn(async () => json({ error: 'invalid_grant' }, 400)),
+      persistence: makePersistence({ accessToken: '', refreshToken: 'REVOKED', expiresAt: 0 }),
+      providerLabel: 'Google Drive',
+      resolveAccountLabel: stubResolveAccountLabel,
+    });
+    await expect(auth.getAccessToken()).rejects.toMatchObject({ code: 'AUTH_FAILED' });
+  });
+
   test('returns the seeded access token without any network or load', async () => {
     const fetchFn = vi.fn();
     const persistence = makePersistence();

@@ -10,6 +10,8 @@ pub use models::*;
 mod desktop;
 #[cfg(mobile)]
 mod mobile;
+#[cfg(desktop)]
+mod oauth_loopback;
 
 mod commands;
 mod error;
@@ -57,6 +59,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             commands::auth_with_safari,
             commands::auth_with_custom_tab,
+            commands::google_drive_authorize,
+            commands::google_drive_clear_token,
+            commands::google_drive_loopback_start,
+            commands::google_drive_loopback_wait,
+            commands::google_drive_loopback_cancel,
             commands::copy_uri_to_path,
             commands::render_pdf_cover,
             commands::save_image_to_gallery,
