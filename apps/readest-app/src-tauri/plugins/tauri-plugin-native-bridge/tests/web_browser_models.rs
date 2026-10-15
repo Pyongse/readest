@@ -6,6 +6,7 @@ fn web_browser_request_round_trips_camel_case_fields() {
     let request: WebBrowserRequest = serde_json::from_value(json!({
         "url": "https://calibre.example.com",
         "downloadDir": "/tmp/browser-downloads",
+        "captureScript": "document.documentElement.outerHTML",
         "isEink": true,
         "labels": { "close": "Schließen" }
     }))
@@ -21,6 +22,7 @@ fn web_browser_request_round_trips_camel_case_fields() {
 
     let json = serde_json::to_value(&request).unwrap();
     assert_eq!(json["downloadDir"], "/tmp/browser-downloads");
+    assert_eq!(json["captureScript"], "document.documentElement.outerHTML");
     assert_eq!(json["isEink"], true);
 }
 
