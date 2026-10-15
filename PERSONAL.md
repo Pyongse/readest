@@ -7,7 +7,7 @@
 - 保留 Readest 的同步引擎、冲突处理、OAuth PKCE 和安全令牌存储。
 - 通过上游的 `NEXT_PUBLIC_SELF_HOSTED=true` 开放第三方同步和自定义翻译服务，无需购买 Readest 会员。这也会开放上游归入同一自托管开关的其他本地功能；官方付费服务器仍按其自己的权限处理请求。
 - 私人版名称是 **Readest Personal**，应用标识是 `com.bilingify.readest.personal`。默认数据目录与官方安装分离；桌面凭据使用独立的 `Readest Personal Safe Storage` 名称，避免共用原版的 Drive 令牌和同步口令。若手动选择自定义书库目录，也应选择独立目录。
-- 私人版分别接入自己的 Desktop 和 Android OAuth 客户端。Windows 使用系统浏览器、PKCE 和本机随机端口回调；Android 使用 Google 原生授权 SDK，后台续期固定已连接账号。真实登录与双端同步仍需设备验收。
+- 私人版分别接入自己的 Desktop 和 Android OAuth 客户端。Windows 使用系统浏览器、PKCE 和本机随机端口回调；Android 使用 Google 原生授权 SDK，后台续期固定已连接账号。Android 登录、书籍上传和 Drive 直接导入已通过用户真机测试，Windows 登录与完整双端同步仍需设备验收。
 - 关闭官方自动更新，后续从自己的构建产物安装更新。私人版 Windows 安装器不注册与官方共享的缩略图处理器。
 - GitHub Actions 包含完整单元测试、类型检查、Windows x64 NSIS 安装器和 Android arm64 签名 APK 构建。
 
@@ -34,13 +34,15 @@
 
 桌面 Google 凭据 JSON 保存在同一私有目录的 `google-desktop-oauth.json`，不提交源码。2026-10-15 用明确无效的测试授权码向 Google 进行参数预检时，桌面客户端在缺少 `client_secret` 时返回了 `invalid_request: client_secret is missing`，因此桌面构建需要上述 Secret。它只用于 Google 的令牌交换和刷新请求，不放入浏览器授权 URL、源码、构建来源记录或 Android 包。
 
+经用户授权配置 GitHub Secret 后，同一参数预检返回 `invalid_grant: Malformed auth code`，说明不再缺少桌面客户端参数。这仅使用了无效测试授权码，不能作为 Windows 真实登录已通过的证据。
+
 原生桌面客户端无法把安装包中的静态 OAuth 客户端凭据真正保密；GitHub Secret 保护的是源码与构建日志，桌面应用运行时仍须携带此配置。用户授权码、访问令牌、刷新令牌和 Android 签名私钥是另一类资料，不能作为客户端配置公开。
 
-本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。GitHub 的完整检查已通过：1,149 个测试文件、13,612 项测试通过，另有上游原有的 4 个文件、16 项测试跳过。Windows 安装包与 Android arm64 APK 均已在 GitHub 构建成功，APK 签名校验通过。尚未完成安装后的真实设备验收、Google 登录及两台设备同步实测。
+本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。GitHub 的完整前端检查已通过：1,152 个测试文件、13,639 项测试通过，另有上游原有的 4 个文件、16 项测试跳过。Windows 的格式、Clippy 检查以及 206 项原生测试全部通过；Android 原生单元测试、APK 构建和固定签名校验通过。尚未完成 Windows 安装后的真实登录及两台设备互通实测。
 
-本次双端构建来源为提交 `3ab3fc78e645ceb1b81aff8d80f49c2d36183673`，[完整工作流结果](https://github.com/Pyongse/readest/actions/runs/38540782594)已通过。安装包、构建来源记录和 SHA-256 校验值已下载到 `E:\reading\readest-packages`。按用户选择，Fork 原有的官方工作流保持启用。
+本次包含自己 OAuth 配置的双端构建来源为提交 `b77ebeb8ba74852de2614f9fa25187f328d3d713`，[完整工作流结果](https://github.com/Pyongse/readest/actions/runs/38666926717)已通过。安装包、构建来源记录、中文使用说明和 SHA-256 校验值放在 `E:\reading\readest-packages\oauth`；上一级目录保留的是此前不含本次授权适配的基础包。按用户选择，Fork 原有的官方工作流保持启用。
 
-## Google Cloud：下一阶段所需配置
+## Google Drive 配置与使用
 
 Google [OAuth 政策](https://developers.google.com/identity/protocols/oauth2/policies)要求各平台分别注册匹配类型的客户端。之前沿用上游共用 iOS 客户端的方案不应作为 Windows、Android 的正式接入方案，现已停止推荐。
 
@@ -48,9 +50,17 @@ Google [OAuth 政策](https://developers.google.com/identity/protocols/oauth2/po
 
 Android 需要可用的 Google Play services。它只在系统安全存储中保存账号和客户端绑定记录，访问令牌留在内存，续期由 Google 服务处理；Windows 的刷新令牌保存在独立系统凭据库。断开连接只清除本机连接，不撤销同一项目其他设备的 Google 授权。需要重新授权时，在“设置 → 集成 → Google Drive”点击“重新连接”。
 
+私人版的 Google Drive 同步不要求登录 Readest 账号。各设备安装私人版、分别授权同一 Google 账号，并启用 Google Drive 同步即可；书籍文件还需开启“上传书籍文件”。
+
 Android 的包名为 `com.bilingify.readest.personal`，固定签名证书 SHA-1 为 `4A:5D:3F:F0:98:C9:C3:3B:FE:5E:C5:08:F6:7C:18:43:39:E0:91:A4`。
 
 权限只申请 `https://www.googleapis.com/auth/drive.file`，访问应用创建或获授权的文件，不申请整个 Drive 的完整访问权限。Google 项目处于外部应用的 Testing 状态时，带 Drive 权限的 refresh token 通常会在 7 天后过期；长期使用需确认项目发布状态。
+
+### 导入 Drive 中已有的电子书
+
+Android 可从 Readest Personal 的“添加／导入书籍”打开系统文件选择器，在左上角侧栏选择“云端硬盘／Google Drive”，再选择 EPUB、PDF 等支持的书籍。没有这一入口时，检查 Google Drive 应用是否已安装并登录；也可先手动下载后导入。[Android 云端文件选择说明](https://developer.android.com/training/data-storage/shared/documents-files)
+
+直接选择可以省去手动下载步骤，但 Readest 导入时仍会把文件复制到应用缓存／书库，占用本机空间。导入后开启“上传书籍文件”并同步，Readest 会维护自己的同步副本，原来 Drive 中的文件保留在原处。当前未实现完全只保留云端链接的阅读模式，也不会自动扫描整个 Drive 作为书架。
 
 ## 配置自己的翻译 API
 
@@ -71,7 +81,7 @@ Android 的包名为 `com.bilingify.readest.personal`，固定签名证书 SHA-1
 
 ## 本地构建与维护
 
-当前本机已具备 Node.js、pnpm 和 Java，尚缺 Rust 和 MSVC Windows 构建工具。自动构建在 GitHub 托管的 Windows/Ubuntu 环境里安装这些依赖。本机不需要为了上传源码而安装完整原生工具链。
+当前本机已具备 Node.js、pnpm、Java 和独立目录中的便携 Rust GNU 工具链；已用实际源码复测 OAuth 回调及原生数据模型测试。本机尚未配置完整的 MSVC 与 Android SDK 原生构建环境，双端安装包由 GitHub 托管的 Windows/Ubuntu 环境构建。本机不需要为了上传源码而安装完整原生工具链。
 
 在仓库根目录运行下面的准备和检查命令（Windows PowerShell）：
 
@@ -99,7 +109,7 @@ Android 的初始化顺序必须遵循工作流：先使用未修改的上游配
 
 ## 双端验收清单
 
-以下项目均需要 Google 配置和真实设备，当前尚未执行：
+2026-10-15 已由用户在 Android 真机完成 Google Drive 连接、书籍上传同步，以及通过系统文件选择器直接从 Drive 导入电子书的测试。首次授权后连接失败，启用同一 Cloud 项目的 Google Drive API 后连接成功，随后同步成功。真机使用提交 `118a8f9c8d97d26c757cc9d2af6cde3d63dce5d2` 构建的 OAuth 包；后续提交只修正了 Windows 原生测试样例并拆分构建检查步骤。以下完整双端验收仍需继续：
 
 | 场景 | 应观察到的结果 |
 | --- | --- |
