@@ -25,11 +25,16 @@
 | --- | --- | --- |
 | Variable | `GOOGLE_DESKTOP_CLIENT_ID` | 自己 Google Cloud 项目的 Desktop app 客户端 ID |
 | Variable | `GOOGLE_ANDROID_CLIENT_ID` | 同一项目的 Android 客户端 ID；包名和签名指纹须匹配私人版 |
+| Secret | `GOOGLE_DESKTOP_CLIENT_SECRET` | Desktop 凭据 JSON 的 `installed.client_secret`；仅提供给 Windows 构建 |
 | Secret | `ANDROID_KEY_BASE64` | 固定 JKS 签名文件的 Base64 内容 |
 | Secret | `ANDROID_KEY_ALIAS` | 签名证书别名 |
 | Secret | `ANDROID_KEY_PASSWORD` | 签名文件与证书共用的密码 |
 
-本机已生成固定签名资料，位于源码仓库外的 `E:\reading\readest-personal-private`。`github-secrets.json` 包含上述三个 Secret，不能提交到源码仓库或作为构建产物发布。请备份此目录；丢失签名会影响 APK 覆盖更新。
+本机已生成固定签名资料，位于源码仓库外的 `E:\reading\readest-personal-private`。`github-secrets.json` 包含 Android 的三个签名 Secret，不能提交到源码仓库或作为构建产物发布。请备份此目录；丢失签名会影响 APK 覆盖更新。
+
+桌面 Google 凭据 JSON 保存在同一私有目录的 `google-desktop-oauth.json`，不提交源码。2026-10-15 用明确无效的测试授权码向 Google 进行参数预检时，桌面客户端在缺少 `client_secret` 时返回了 `invalid_request: client_secret is missing`，因此桌面构建需要上述 Secret。它只用于 Google 的令牌交换和刷新请求，不放入浏览器授权 URL、源码、构建来源记录或 Android 包。
+
+原生桌面客户端无法把安装包中的静态 OAuth 客户端凭据真正保密；GitHub Secret 保护的是源码与构建日志，桌面应用运行时仍须携带此配置。用户授权码、访问令牌、刷新令牌和 Android 签名私钥是另一类资料，不能作为客户端配置公开。
 
 本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。GitHub 的完整检查已通过：1,149 个测试文件、13,612 项测试通过，另有上游原有的 4 个文件、16 项测试跳过。Windows 安装包与 Android arm64 APK 均已在 GitHub 构建成功，APK 签名校验通过。尚未完成安装后的真实设备验收、Google 登录及两台设备同步实测。
 
@@ -79,7 +84,7 @@ pnpm test --run --maxWorkers=4
 pnpm lint
 ```
 
-Windows 构建前，先设置 `$env:GOOGLE_DESKTOP_CLIENT_ID` 和 `$env:GOOGLE_ANDROID_CLIENT_ID`：
+Windows 构建前，先设置 `$env:GOOGLE_DESKTOP_CLIENT_ID` 和 `$env:GOOGLE_ANDROID_CLIENT_ID`，并从私有 Desktop JSON 读取 `$env:GOOGLE_DESKTOP_CLIENT_SECRET`：
 
 ```powershell
 node scripts/prepare-personal-build.mjs

@@ -17,6 +17,7 @@ export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export interface ConnectGoogleDriveDeps {
   /** The env-baked official OAuth client id. */
   clientId: string;
+  clientSecret?: string;
   /** Platform `fetch` for the token exchange + `about.get`. */
   fetchFn: FetchFn;
   /** Where the token set is saved (keychain). */
@@ -43,7 +44,7 @@ export const connectGoogleDrive = async (
   deps: ConnectGoogleDriveDeps,
 ): Promise<ConnectGoogleDriveResult> => {
   const tokens = await deps.runOAuth(
-    buildGoogleOAuthConfig(deps.clientId, DRIVE_FILE_SCOPE),
+    buildGoogleOAuthConfig(deps.clientId, DRIVE_FILE_SCOPE, deps.clientSecret),
     deps.fetchFn,
   );
   // Fail-loud: if the keychain rejects the token, surface it so the UI does not
@@ -52,6 +53,7 @@ export const connectGoogleDrive = async (
 
   const auth = createGoogleDriveAuth({
     clientId: deps.clientId,
+    clientSecret: deps.clientSecret,
     fetchFn: deps.fetchFn,
     persistence: deps.persistence,
     initialTokens: tokens,

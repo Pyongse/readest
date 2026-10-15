@@ -2,7 +2,7 @@
 
 核对日期：2026-10-15。适用设备：Windows 电脑、Android 手机。以下按个人 Gmail 账号、自己使用、安装私人版 APK 的情况说明。
 
-你负责登录 Google、创建项目和确认授权；把完成后的 **Windows Client ID 与 Android Client ID** 发给我，我负责接入源码、设置构建参数和重新生成安装包。无需提供 Google 密码、验证码、Client Secret、访问令牌或签名私钥。
+你负责登录 Google、创建项目和确认授权；把完成后的 **Windows Client ID 与 Android Client ID** 发给我，并把 Desktop 凭据 JSON 保存到本机私有目录，我负责接入源码、设置构建参数和重新生成安装包。无需提供 Google 密码、验证码、访问令牌或签名私钥；不要在聊天中粘贴 Client Secret。
 
 ## 先说明这次核对发现的变化
 
@@ -121,7 +121,7 @@ ID 的样式大致如下；这只是格式示例，不能照抄：
 123456789012-example.apps.googleusercontent.com
 ```
 
-如果创建窗口提供“下载 JSON / Download JSON”，可以下载作为自己的备份，并保存到源码仓库外的 `E:\reading\readest-personal-private\google-desktop-oauth.json`。桌面凭据 JSON 可能包含 `client_secret`，不要在聊天里粘贴，也不要提交到 GitHub。Google 的原生 OAuth 文档把令牌交换和刷新请求中的 `client_secret` 列为可选参数；当前先交 Client ID 即可，具体接入再按正确桌面流程核对，不把“JSON 里有 Secret”误当作“必须部署服务器”。[Google 原生应用令牌交换与刷新参数](https://developers.google.com/identity/protocols/oauth2/native-app)
+创建时下载“JSON / Download JSON”，保存到源码仓库外的 `E:\reading\readest-personal-private\google-desktop-oauth.json`。不要在聊天里粘贴其中的 `client_secret`，也不要提交凭据文件。Google 的通用原生 OAuth 文档将该参数列为可选，但本项目桌面客户端在 2026-10-15 的实际参数预检明确返回 `client_secret is missing`；因此构建需要读取 Desktop JSON 中的 `installed.client_secret`。经你授权后，将其保存为 GitHub Actions Secret `GOOGLE_DESKTOP_CLIENT_SECRET`，仅用于 Windows 构建，不部署服务器。[Google 原生令牌参数](https://developers.google.com/identity/protocols/oauth2/native-app)
 
 正确的 Windows 授权集成会用系统浏览器，并通过电脑本机的 loopback 回调接回授权结果，端口由应用处理。你不必为此购买域名、部署网站或手工改 Windows 回调协议。[Google 桌面回调方式](https://developers.google.com/identity/protocols/oauth2/native-app)
 
@@ -170,7 +170,7 @@ Client ID 属于公开应用标识，通常会随安装包分发；它本身不�
 
 一般由我完成这一步。你若以后自己操作：打开 [Pyongse/readest](https://github.com/Pyongse/readest) → Settings → Secrets and variables → Actions → Variables → New repository variable，按**完成平台授权适配后的构建说明**添加对应的公开 Client ID 变量；不要使用 Secrets 存放应用的访问令牌。
 
-当前工作流使用两个 Variable：`GOOGLE_DESKTOP_CLIENT_ID` 和 `GOOGLE_ANDROID_CLIENT_ID`，分别填写对应的公开 ID。之后在 Actions → Build Readest Personal → Run workflow，选择 `personal-drive` 分支运行；下载成功的两个平台产物。Android 账号选择与授权由 Google Play services 处理，无需为本次同步创建 Web server 客户端。
+当前工作流使用两个 Variable：`GOOGLE_DESKTOP_CLIENT_ID` 和 `GOOGLE_ANDROID_CLIENT_ID`，分别填写对应的公开 ID；再在 Secrets 中设置 `GOOGLE_DESKTOP_CLIENT_SECRET`。之后在 Actions → Build Readest Personal → Run workflow，选择 `personal-drive` 分支运行；下载成功的两个平台产物。Android 构建不会接收桌面 Secret，账号选择与授权由 Google Play services 处理。
 
 ## 10. 新包到手后的登录与同步验收
 

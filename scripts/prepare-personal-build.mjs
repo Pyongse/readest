@@ -5,6 +5,8 @@ const app = path.resolve('apps/readest-app');
 const tauriDir = path.join(app, 'src-tauri');
 const desktopId = (process.env.GOOGLE_DESKTOP_CLIENT_ID ?? '').trim();
 const androidId = (process.env.GOOGLE_ANDROID_CLIENT_ID ?? '').trim();
+const desktopSecret = (process.env.GOOGLE_DESKTOP_CLIENT_SECRET ?? '').trim();
+if (/[\r\n]/.test(desktopSecret)) throw new Error('Desktop client credential must be a single line.');
 for (const id of [desktopId, androidId]) {
   if (id && !/^\d+-[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test(id)) {
     throw new Error('Google OAuth client IDs must not contain secrets or extra lines.');
@@ -44,6 +46,7 @@ const values = {
   NEXT_PUBLIC_GOOGLE_CLIENT_ID: '',
   NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_ID: desktopId,
   NEXT_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: androidId,
+  NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_SECRET: JSON.stringify(desktopSecret),
 };
 for (const [key, value] of Object.entries(values)) {
   const line = `${key}=${value}`;

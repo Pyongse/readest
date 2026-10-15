@@ -5,9 +5,9 @@
  * supplied by the caller (see `tokenEndpoint` on {@link ExchangeCodeParams} /
  * {@link RefreshTokenParams}).
  *
- * Readest's official Google client is the iOS application type, which has NO
- * client secret — neither request sends one. The authorization code is instead
- * bound to this client by replaying the PKCE `code_verifier` (see `pkce.ts`).
+ * Client credentials are optional for providers that do not use them; the
+ * personal Google Desktop client supplies its installed-app credential. PKCE
+ * additionally binds the authorization code to this attempt's verifier.
  *
  * The request/parse logic is pure given an injected `fetch`, which keeps it
  * testable without a network and platform-agnostic.
@@ -81,6 +81,8 @@ export interface TokenSet {
 
 /** Inputs for {@link exchangeCode}. */
 export interface ExchangeCodeParams {
+  /** Desktop Google clients require their installed-app client credential. */
+  clientSecret?: string;
   /** Authorization code the provider returned to the redirect URI. */
   code: string;
   /** PKCE verifier whose challenge was sent to the authorization endpoint. */
@@ -95,6 +97,7 @@ export interface ExchangeCodeParams {
 
 /** Inputs for {@link refreshAccessToken}. */
 export interface RefreshTokenParams {
+  clientSecret?: string;
   /** Refresh token obtained from a prior {@link exchangeCode}. */
   refreshToken: string;
   /** OAuth client ID registered for this app with the provider. */
@@ -188,11 +191,11 @@ export const requestTokens = async (
 
 /**
  * Exchange an authorization `code` (plus the PKCE `verifier`) for an access and
- * refresh token. PKCE binds the code to this client; no client secret is sent
- * (Readest's client is the iOS application type, which has none).
+ * refresh token. PKCE binds the code to this attempt; a desktop client credential
+ * is sent only when supplied by its platform configuration.
  */
 export const exchangeCode = (
-  { code, verifier, clientId, redirectUri, tokenEndpoint }: ExchangeCodeParams,
+  { code, verifier, clientId, clientSecret, redirectUri, tokenEndpoint }: ExchangeCodeParams,
   fetchFn: FetchFn,
 ): Promise<TokenSet> => {
   const params = new URLSearchParams();
@@ -200,6 +203,7 @@ export const exchangeCode = (
   params.set(TOKEN_PARAM.code, code);
   params.set(TOKEN_PARAM.codeVerifier, verifier);
   params.set(TOKEN_PARAM.clientId, clientId);
+  if (clientSecret) params.set('client_secret', clientSecret);
   params.set(TOKEN_PARAM.redirectUri, redirectUri);
   return requestTokens(tokenEndpoint, params, 'exchange', fetchFn);
 };
@@ -210,12 +214,13 @@ export const exchangeCode = (
  * caller should keep the existing one when the response doesn't include one.
  */
 export const refreshAccessToken = (
-  { refreshToken, clientId, tokenEndpoint }: RefreshTokenParams,
+  { refreshToken, clientId, clientSecret, tokenEndpoint }: RefreshTokenParams,
   fetchFn: FetchFn,
 ): Promise<TokenSet> => {
   const params = new URLSearchParams();
   params.set(TOKEN_PARAM.grantType, GRANT_TYPE.refreshToken);
   params.set(TOKEN_PARAM.refreshToken, refreshToken);
   params.set(TOKEN_PARAM.clientId, clientId);
+  if (clientSecret) params.set('client_secret', clientSecret);
   return requestTokens(tokenEndpoint, params, 'refresh', fetchFn);
 };

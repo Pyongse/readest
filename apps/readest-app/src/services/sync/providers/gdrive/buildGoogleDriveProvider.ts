@@ -52,6 +52,11 @@ export const getGoogleClientId = (): string | undefined => {
   return process.env['NEXT_PUBLIC_GOOGLE_CLIENT_ID'] || OFFICIAL_GOOGLE_CLIENT_ID;
 };
 
+export const getGoogleDesktopClientSecret = (): string | undefined =>
+  process.env['NEXT_PUBLIC_PERSONAL_BUILD'] === 'true'
+    ? process.env['NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_SECRET'] || undefined
+    : undefined;
+
 /**
  * The official Readest **Web-type** Google OAuth client id used by the browser
  * GIS flow (its authorized JavaScript origins are `web.readest.com` + the
@@ -98,6 +103,11 @@ export const buildGoogleDriveProvider = async (): Promise<FileSyncProvider | nul
   const persistence = await createDriveTokenPersistence();
   if (!persistence) return null;
 
-  const auth = createGoogleDriveAuth({ clientId, fetchFn, persistence });
+  const auth = createGoogleDriveAuth({
+    clientId,
+    clientSecret: getGoogleDesktopClientSecret(),
+    fetchFn,
+    persistence,
+  });
   return createGoogleDriveProvider(auth, fetchFn);
 };

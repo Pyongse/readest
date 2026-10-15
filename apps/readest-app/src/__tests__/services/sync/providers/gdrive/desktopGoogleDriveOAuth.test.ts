@@ -14,6 +14,23 @@ const makeDeps = () => ({
 });
 
 describe('desktop Google OAuth loopback flow', () => {
+  test('desktop credential is sent only to the token endpoint, never the browser URL', async () => {
+    const deps = makeDeps();
+    const fetchFn = vi.fn(
+      async (_input: string, _init: RequestInit) =>
+        new Response(JSON.stringify({ access_token: 'TOKEN', expires_in: 3600 })),
+    );
+    await runDesktopGoogleDriveOAuth(
+      { ...config, clientSecret: 'test-desktop-credential' },
+      fetchFn,
+      deps,
+    );
+    expect(deps.openUrl.mock.calls[0]![0]).not.toContain('test-desktop-credential');
+    expect(new URLSearchParams(fetchFn.mock.calls[0]![1].body as string).get('client_secret')).toBe(
+      'test-desktop-credential',
+    );
+  });
+
   test('exchanges the code with PKCE and the allocated loopback URI', async () => {
     const deps = makeDeps();
     const fetchFn = vi.fn(

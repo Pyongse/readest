@@ -39,10 +39,10 @@ async function fixture() {
   return { root, app, android };
 }
 
-function prepare(root, desktop = '', android = '') {
+function prepare(root, desktop = '', android = '', desktopSecret = '') {
   return spawnSync(process.execPath, [script], {
     cwd: root, encoding: 'utf8',
-    env: { ...process.env, GOOGLE_DESKTOP_CLIENT_ID: desktop, GOOGLE_ANDROID_CLIENT_ID: android },
+    env: { ...process.env, GOOGLE_DESKTOP_CLIENT_ID: desktop, GOOGLE_ANDROID_CLIENT_ID: android, GOOGLE_DESKTOP_CLIENT_SECRET: desktopSecret },
   });
 }
 
@@ -95,5 +95,17 @@ test('partial configuration or clients from different Cloud projects fail before
   const before = await readFile(configPath, 'utf8');
   assert.notEqual(prepare(root, desktopId).status, 0);
   assert.notEqual(prepare(root, desktopId, '789-android.apps.googleusercontent.com').status, 0);
+  assert.equal(await readFile(configPath, 'utf8'), before);
+});
+
+test('desktop credentials stay in the local env file and reject multiline input', async () => {
+  const { root, app } = await fixture();
+  assert.equal(prepare(root, desktopId, androidId, 'test-desktop-credential').status, 0);
+  const env = await readFile(path.join(app, '.env.local'), 'utf8');
+  assert.ok(env.includes('NEXT_PUBLIC_GOOGLE_DESKTOP_CLIENT_SECRET="test-desktop-credential"'));
+  const configPath = path.join(app, 'src-tauri/tauri.conf.json');
+  const before = await readFile(configPath, 'utf8');
+  assert.ok(!before.includes('test-desktop-credential'));
+  assert.notEqual(prepare(root, desktopId, androidId, 'bad\nEXTRA=value').status, 0);
   assert.equal(await readFile(configPath, 'utf8'), before);
 });

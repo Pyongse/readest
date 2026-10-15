@@ -22,8 +22,13 @@ export const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
  * forces re-consent so a refresh token is actually returned (Google only grants
  * one on first consent otherwise).
  */
-export const buildGoogleOAuthConfig = (clientId: string, scope: string): OAuthClientConfig => ({
+export const buildGoogleOAuthConfig = (
+  clientId: string,
+  scope: string,
+  clientSecret?: string,
+): OAuthClientConfig => ({
   clientId,
+  ...(clientSecret ? { clientSecret } : {}),
   scope,
   authEndpoint: GOOGLE_AUTH_ENDPOINT,
   tokenEndpoint: GOOGLE_TOKEN_ENDPOINT,

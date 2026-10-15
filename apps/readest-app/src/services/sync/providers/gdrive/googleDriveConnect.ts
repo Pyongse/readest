@@ -10,6 +10,7 @@ import { isTauriAppPlatform, isWebAppPlatform } from '@/services/environment';
 import {
   getGoogleClientId,
   getGoogleWebClientId,
+  getGoogleDesktopClientSecret,
   isPersonalAndroidDrive,
 } from './buildGoogleDriveProvider';
 import { createAndroidDriveAuth } from './AndroidDriveAuth';
@@ -94,6 +95,7 @@ export const runGoogleDriveConnect = async (): Promise<ConnectGoogleDriveResult>
   }
   const result = await connectGoogleDrive({
     clientId,
+    clientSecret: getGoogleDesktopClientSecret(),
     fetchFn: resolveFetch(),
     persistence,
     runOAuth: resolveOAuthRunner(),

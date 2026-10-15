@@ -9,6 +9,37 @@ const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('tokenEndpoint', () => {
+  test('desktop client credentials are included in both exchange and refresh forms', async () => {
+    const fetchFn = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ access_token: 'AT', expires_in: 3600 }),
+    );
+    await exchangeCode(
+      {
+        clientId: 'desktop',
+        clientSecret: 'test-desktop-secret',
+        code: 'C',
+        verifier: 'V',
+        redirectUri: 'http://127.0.0.1:1234/oauthredirect',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+      },
+      fetchFn,
+    );
+    await refreshAccessToken(
+      {
+        clientId: 'desktop',
+        clientSecret: 'test-desktop-secret',
+        refreshToken: 'RT',
+        tokenEndpoint: 'https://oauth2.googleapis.com/token',
+      },
+      fetchFn,
+    );
+    for (const [, init] of fetchFn.mock.calls) {
+      expect(new URLSearchParams(init.body as string).get('client_secret')).toBe(
+        'test-desktop-secret',
+      );
+    }
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(0);

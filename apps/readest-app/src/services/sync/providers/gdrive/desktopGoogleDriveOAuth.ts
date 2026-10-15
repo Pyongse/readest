@@ -58,6 +58,7 @@ export const runDesktopGoogleDriveOAuth = async (
         verifier,
         clientId: config.clientId,
         redirectUri: session.redirectUri,
+        clientSecret: config.clientSecret,
         tokenEndpoint: config.tokenEndpoint,
       },
       fetchFn,

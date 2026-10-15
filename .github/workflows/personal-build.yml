@@ -51,6 +51,7 @@ jobs:
     env:
       GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.GOOGLE_DESKTOP_CLIENT_ID }}
       GOOGLE_ANDROID_CLIENT_ID: ${{ vars.GOOGLE_ANDROID_CLIENT_ID }}
+      GOOGLE_DESKTOP_CLIENT_SECRET: ${{ matrix.platform == 'windows' && secrets.GOOGLE_DESKTOP_CLIENT_SECRET || '' }}
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,7 +92,12 @@ jobs:
           git restore --source=HEAD -- apps/readest-app/src-tauri/gen/android
           pnpm tauri icon ../../data/icons/readest-book.png
       - name: Prepare personal identity, OAuth callbacks and translation access
-        run: node scripts/prepare-personal-build.mjs
+        shell: pwsh
+        run: |
+          if ("${{ matrix.platform }}" -eq 'windows' -and $env:GOOGLE_DESKTOP_CLIENT_ID -and !$env:GOOGLE_DESKTOP_CLIENT_SECRET) {
+            throw 'Configure GOOGLE_DESKTOP_CLIENT_SECRET from the Desktop OAuth credentials JSON. See PERSONAL.md.'
+          }
+          node scripts/prepare-personal-build.mjs
       - name: Configure persistent Android release signing
         if: matrix.platform == 'android'
         shell: bash

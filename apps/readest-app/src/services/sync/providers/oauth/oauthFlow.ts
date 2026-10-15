@@ -23,6 +23,7 @@ import type { TokenSet } from './tokenEndpoint';
  * later) all live here so the runners themselves stay provider-agnostic.
  */
 export interface OAuthClientConfig {
+  clientSecret?: string;
   /** OAuth client ID registered for this app with the provider. */
   clientId: string;
   /** Space-delimited OAuth scopes to request (e.g. the Drive app-file scope). */
