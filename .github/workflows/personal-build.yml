@@ -131,17 +131,25 @@ jobs:
         run: |
           pnpm tauri build --target x86_64-pc-windows-msvc --bundles nsis
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Get-ChildItem -Path target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe)) {
+            throw 'Windows installer was not produced'
+          }
+      - name: Check Windows native formatting and warnings
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
           cargo fmt -p Readest -p tauri-plugin-native-bridge --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo clippy -p Readest -p tauri-plugin-native-bridge --target x86_64-pc-windows-msvc --release --no-deps -- -D warnings
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test Windows native bridge and application
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
           cargo test -p tauri-plugin-native-bridge --target x86_64-pc-windows-msvc --release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test -p Readest --lib --target x86_64-pc-windows-msvc --release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (!(Get-ChildItem -Path target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe)) {
-            throw 'Windows installer was not produced'
-          }
       - name: Build Android APK
         if: matrix.platform == 'android'
         shell: bash
