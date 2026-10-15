@@ -7,7 +7,7 @@
 - 保留 Readest 的同步引擎、冲突处理、OAuth PKCE 和安全令牌存储。
 - 通过上游的 `NEXT_PUBLIC_SELF_HOSTED=true` 开放第三方同步和自定义翻译服务，无需购买 Readest 会员。这也会开放上游归入同一自托管开关的其他本地功能；官方付费服务器仍按其自己的权限处理请求。
 - 私人版名称是 **Readest Personal**，应用标识是 `com.bilingify.readest.personal`。默认数据目录与官方安装分离；桌面凭据使用独立的 `Readest Personal Safe Storage` 名称，避免共用原版的 Drive 令牌和同步口令。若手动选择自定义书库目录，也应选择独立目录。
-- 私人版分别接入自己的 Desktop 和 Android OAuth 客户端。Windows 使用系统浏览器、PKCE 和本机随机端口回调；Android 使用 Google 原生授权 SDK，后台续期固定已连接账号。Android 登录、书籍上传和 Drive 直接导入已通过用户真机测试，Windows 登录与完整双端同步仍需设备验收。
+- 私人版分别接入自己的 Desktop 和 Android OAuth 客户端。Windows 使用系统浏览器、PKCE 和本机随机端口回调；Android 使用 Google 原生授权 SDK，后台续期固定已连接账号。用户真机已确认两端登录、Android 上传后 Windows 读取书籍、Windows 到 Android 的阅读位置同步，以及 Android 到 Windows 的书签、标注和笔记同步。
 - 关闭官方自动更新，后续从自己的构建产物安装更新。私人版 Windows 安装器不注册与官方共享的缩略图处理器。
 - GitHub Actions 包含完整单元测试、类型检查、Windows x64 NSIS 安装器和 Android arm64 签名 APK 构建。
 
@@ -38,7 +38,7 @@
 
 原生桌面客户端无法把安装包中的静态 OAuth 客户端凭据真正保密；GitHub Secret 保护的是源码与构建日志，桌面应用运行时仍须携带此配置。用户授权码、访问令牌、刷新令牌和 Android 签名私钥是另一类资料，不能作为客户端配置公开。
 
-本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。GitHub 的完整前端检查已通过：1,152 个测试文件、13,639 项测试通过，另有上游原有的 4 个文件、16 项测试跳过。Windows 的格式、Clippy 检查以及 206 项原生测试全部通过；Android 原生单元测试、APK 构建和固定签名校验通过。尚未完成 Windows 安装后的真实登录及两台设备互通实测。
+本机已通过前端生产构建、类型与代码规范检查、工作流检查和配置脚本测试。GitHub 的完整前端检查已通过：1,152 个测试文件、13,639 项测试通过，另有上游原有的 4 个文件、16 项测试跳过。Windows 的格式、Clippy 检查以及 206 项原生测试全部通过；Android 原生单元测试、APK 构建和固定签名校验通过。用户真机已验证核心双端同步：手机上传的书可在 Windows 打开；电脑阅读位置可同步到手机，手机的书签、标注和笔记可同步到电脑，内容与定位全部一致。
 
 本次包含自己 OAuth 配置的双端构建来源为提交 `b77ebeb8ba74852de2614f9fa25187f328d3d713`，[完整工作流结果](https://github.com/Pyongse/readest/actions/runs/38666926717)已通过。安装包、构建来源记录、中文使用说明和 SHA-256 校验值放在 `E:\reading\readest-packages\oauth`；上一级目录保留的是此前不含本次授权适配的基础包。按用户选择，Fork 原有的官方工作流保持启用。
 
@@ -46,7 +46,7 @@
 
 Google [OAuth 政策](https://developers.google.com/identity/protocols/oauth2/policies)要求各平台分别注册匹配类型的客户端。之前沿用上游共用 iOS 客户端的方案不应作为 Windows、Android 的正式接入方案，现已停止推荐。
 
-请按 [Google Cloud 详细操作指南](GOOGLE_OAUTH_SETUP.md)在同一个 Cloud 项目创建 **Desktop app** 和 **Android** 两个客户端。对应的 Windows 回调和 Android 原生授权已接入私人版；两端使用同一项目和同一 Google 账号，仍需验证 `drive.file` 文件互见及同步行为。现有基础安装包不含此配置，必须使用完成这次授权适配后重新构建的安装包。
+请按 [Google Cloud 详细操作指南](GOOGLE_OAUTH_SETUP.md)在同一个 Cloud 项目创建 **Desktop app** 和 **Android** 两个客户端。对应的 Windows 回调和 Android 原生授权已接入私人版；两端使用同一项目和同一 Google 账号，已通过下表所列核心同步实测。请使用本次 OAuth 安装包；此前的基础包不含这次授权适配。
 
 Android 需要可用的 Google Play services。它只在系统安全存储中保存账号和客户端绑定记录，访问令牌留在内存，续期由 Google 服务处理；Windows 的刷新令牌保存在独立系统凭据库。断开连接只清除本机连接，不撤销同一项目其他设备的 Google 授权。需要重新授权时，在“设置 → 集成 → Google Drive”点击“重新连接”。
 
@@ -109,18 +109,21 @@ Android 的初始化顺序必须遵循工作流：先使用未修改的上游配
 
 ## 双端验收清单
 
-2026-10-15 已由用户在 Android 真机完成 Google Drive 连接、书籍上传同步，以及通过系统文件选择器直接从 Drive 导入电子书的测试。首次授权后连接失败，启用同一 Cloud 项目的 Google Drive API 后连接成功，随后同步成功。真机使用提交 `118a8f9c8d97d26c757cc9d2af6cde3d63dce5d2` 构建的 OAuth 包；后续提交只修正了 Windows 原生测试样例并拆分构建检查步骤。以下完整双端验收仍需继续：
+2026-10-15 已由用户完成核心双端实测。Android 首次授权后连接失败，启用同一 Cloud 项目的 Google Drive API 后解决。Android 真机使用提交 `118a8f9c8d97d26c757cc9d2af6cde3d63dce5d2` 构建的 OAuth 包，Windows 使用提交 `b77ebeb8ba74852de2614f9fa25187f328d3d713` 的最终包；两者之间只修正了 Windows 原生测试样例并拆分构建检查步骤。
 
-| 场景 | 应观察到的结果 |
-| --- | --- |
-| Windows 导入 EPUB/PDF，Android 刷新 | 同一本书可下载并正常打开 |
-| Windows 阅读并关闭书籍，Android 打开 | 跳到最近同步的位置 |
-| Android 新建书签、标注、笔记，Windows 刷新 | 对应内容与定位均一致 |
-| 两端离线修改再恢复联网 | 无异常覆盖；核对上游冲突合并行为 |
-| 两端退出并重新启动 | Drive 登录仍有效，书籍和阅读数据保留 |
-| Google 测试授权超过 7 天或撤销授权 | 明确提示重新授权，而不是悄悄同步到 Readest Cloud |
-| 两端分别填写自己的翻译 API 配置 | 测试翻译成功，阅读时可以使用该服务 |
-| 安装下一次签名 APK | 能覆盖安装，原有本地书库和进度保留 |
+| 场景 | 应观察到的结果 | 真机结果 |
+| --- | --- | --- |
+| 两端授权同一 Google 账号 | Google Drive 连接成功 | 已通过 |
+| Android 从系统文件选择器直接选择 Drive 电子书 | 可导入 Readest 书架并打开 | 已通过 |
+| Android 上传书籍，Windows 同步后打开 | 同一本书可见且可阅读 | 已通过 |
+| Windows 阅读并关闭书籍，Android 同步后打开 | 阅读位置一致 | 已通过 |
+| Android 新建书签、标注、笔记，Windows 同步 | 内容与定位均一致 | 已通过 |
+| Windows 新导入书籍或 PDF，Android 刷新 | 同一本书可下载并正常打开 | 尚未单独实测 |
+| 两端离线修改再恢复联网 | 无异常覆盖；核对上游冲突合并行为 | 尚未实测 |
+| 两端退出并重新启动 | Drive 登录仍有效，书籍和阅读数据保留 | 尚未实测 |
+| Google 测试授权超过 7 天或撤销授权 | 明确提示重新授权 | 尚未实测 |
+| 两端分别填写自己的翻译 API 配置 | 测试翻译成功，阅读时可以使用该服务 | 尚未调用真实服务 |
+| 安装下一次签名 APK | 能覆盖安装，原有本地书库和进度保留 | 尚未实测 |
 
 ## 参考来源
 
